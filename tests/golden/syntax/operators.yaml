@@ -1,0 +1,80 @@
+# Oracle operator syntax → PostgreSQL equivalents
+# Reference: CYBERTEC Oracle-to-PostgreSQL migration guide
+
+- name: minus_to_except
+  category: syntax
+  oracle: "SELECT id FROM table_a MINUS SELECT id FROM table_b"
+  expected_postgresql: "SELECT id FROM table_a EXCEPT SELECT id FROM table_b"
+  complexity: 2
+  constructs: ["MINUS"]
+  tags: ["cybertec", "operators"]
+
+- name: date_plus_integer
+  category: syntax
+  oracle: "SELECT hire_date + 7 FROM employees"
+  expected_postgresql: "SELECT hire_date + interval '7 days' FROM employees"
+  complexity: 3
+  constructs: ["DATE_ARITHMETIC"]
+  tags: ["cybertec", "operators"]
+
+- name: date_minus_date
+  category: syntax
+  oracle: "SELECT end_date - start_date FROM projects"
+  expected_postgresql: "SELECT EXTRACT(EPOCH FROM (end_date - start_date)) / 86400 FROM projects"
+  complexity: 4
+  constructs: ["DATE_ARITHMETIC"]
+  tags: ["cybertec", "operators"]
+  acceptance_criteria:
+    - "Oracle returns number of days as a number; PostgreSQL date - date returns integer days for DATE type or interval for TIMESTAMP"
+
+- name: sysdate_plus_fraction_hour
+  category: syntax
+  oracle: "SELECT SYSDATE + 1/24 FROM DUAL"
+  expected_postgresql: "SELECT CURRENT_TIMESTAMP + interval '1 hour'"
+  complexity: 4
+  constructs: ["SYSDATE", "DATE_ARITHMETIC", "DUAL"]
+  tags: ["cybertec", "operators"]
+
+- name: string_concat_null_safe
+  category: syntax
+  oracle: "SELECT 'Hello ' || col1 || ' World' FROM t"
+  expected_postgresql: "SELECT concat('Hello ', col1, ' World') FROM t"
+  complexity: 3
+  constructs: ["NULL_CONCAT"]
+  tags: ["cybertec", "operators"]
+  acceptance_criteria:
+    - "Oracle || is null-safe; PostgreSQL || returns NULL if any operand is NULL; use concat() for safety"
+
+- name: plsql_assignment_operator
+  category: syntax
+  oracle: "v_count := 0;"
+  expected_postgresql: "v_count := 0;"
+  complexity: 1
+  constructs: ["ASSIGNMENT"]
+  tags: ["cybertec", "operators", "no_change"]
+  acceptance_criteria:
+    - ":= assignment works the same in PL/SQL and PL/pgSQL"
+
+- name: rownum_pagination_pattern
+  category: syntax
+  oracle: >
+    SELECT * FROM (
+      SELECT a.*, ROWNUM rnum FROM (
+        SELECT * FROM employees ORDER BY hire_date
+      ) a WHERE ROWNUM <= 20
+    ) WHERE rnum > 10
+  expected_postgresql: >
+    SELECT * FROM employees ORDER BY hire_date LIMIT 10 OFFSET 10
+  complexity: 6
+  constructs: ["ROWNUM"]
+  tags: ["cybertec", "operators", "pagination"]
+  acceptance_criteria:
+    - "Classic Oracle pagination with nested ROWNUM → PostgreSQL LIMIT/OFFSET"
+
+- name: sysdate_minus_fraction_minutes
+  category: syntax
+  oracle: "SELECT SYSDATE - 30/1440 FROM DUAL"
+  expected_postgresql: "SELECT CURRENT_TIMESTAMP - interval '30 minutes'"
+  complexity: 4
+  constructs: ["SYSDATE", "DATE_ARITHMETIC", "DUAL"]
+  tags: ["cybertec", "operators"]

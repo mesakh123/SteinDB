@@ -1,0 +1,58 @@
+{
+  "app_name": "SteinDB",
+  "tagline": "เครื่องมือย้ายฐานข้อมูลแบบสองทิศทาง Oracle ↔ PostgreSQL เพียงหนึ่งเดียว",
+  "directions": {
+    "o2p": "Oracle ไปยัง PostgreSQL",
+    "p2o": "PostgreSQL ไปยัง Oracle"
+  },
+  "tiers": {
+    "free": "ฟรี",
+    "registered": "ลงทะเบียนแล้ว",
+    "solo": "โซโล",
+    "team": "ทีม",
+    "enterprise": "องค์กร"
+  },
+  "roles": {
+    "owner": "เจ้าของ",
+    "admin": "ผู้ดูแลระบบ",
+    "member": "สมาชิก",
+    "viewer": "ผู้ชม"
+  },
+  "actions": {
+    "save": "บันทึก",
+    "cancel": "ยกเลิก",
+    "delete": "ลบ",
+    "edit": "แก้ไข",
+    "create": "สร้าง",
+    "search": "ค้นหา",
+    "filter": "กรอง",
+    "export": "ส่งออก",
+    "download": "ดาวน์โหลด",
+    "copy": "คัดลอก",
+    "copied": "คัดลอกแล้ว!",
+    "loading": "กำลังโหลด...",
+    "submit": "ส่ง",
+    "confirm": "ยืนยัน",
+    "back": "กลับ",
+    "next": "ถัดไป",
+    "upgrade": "อัปเกรด",
+    "register": "ลงทะเบียน",
+    "login": "เข้าสู่ระบบ",
+    "logout": "ออกจากระบบ"
+  },
+  "status": {
+    "active": "ใช้งานอยู่",
+    "inactive": "ไม่ได้ใช้งาน",
+    "success": "สำเร็จ",
+    "failed": "ล้มเหลว",
+    "partial": "บางส่วน",
+    "pending": "รอดำเนินการ"
+  },
+  "time": {
+    "just_now": "เมื่อสักครู่",
+    "minutes_ago": "{n} นาทีที่แล้ว",
+    "hours_ago": "{n} ชั่วโมงที่แล้ว",
+    "days_ago": "{n} วันที่แล้ว",
+    "yesterday": "เมื่อวาน"
+  }
+}

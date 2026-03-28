@@ -1,0 +1,96 @@
+# =============================================================================
+# SteinDB Golden Tests — P2O Data Type Conversions (Basic)
+# PostgreSQL-to-Oracle reverse mappings for fundamental data types
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# STRING TYPES
+# ---------------------------------------------------------------------------
+
+- name: varchar_to_varchar2
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (name VARCHAR(100))"
+  expected: "CREATE TABLE t (name VARCHAR2(100))"
+  constructs: ["VARCHAR"]
+  tags: ["string", "p2o"]
+
+- name: text_to_clob
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (description TEXT)"
+  expected: "CREATE TABLE t (description CLOB)"
+  constructs: ["TEXT"]
+  tags: ["string", "lob", "p2o"]
+
+- name: char_to_char
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (code CHAR(5))"
+  expected: "CREATE TABLE t (code CHAR(5))"
+  constructs: ["CHAR"]
+  tags: ["string", "p2o"]
+
+# ---------------------------------------------------------------------------
+# NUMERIC TYPES
+# ---------------------------------------------------------------------------
+
+- name: integer_to_number10
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (id INTEGER)"
+  expected: "CREATE TABLE t (id NUMBER(10))"
+  constructs: ["INTEGER"]
+  tags: ["numeric", "p2o"]
+
+- name: bigint_to_number19
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (big_id BIGINT)"
+  expected: "CREATE TABLE t (big_id NUMBER(19))"
+  constructs: ["BIGINT"]
+  tags: ["numeric", "p2o"]
+
+- name: smallint_to_number5
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (small_val SMALLINT)"
+  expected: "CREATE TABLE t (small_val NUMBER(5))"
+  constructs: ["SMALLINT"]
+  tags: ["numeric", "p2o"]
+
+- name: boolean_to_number1
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (is_active BOOLEAN)"
+  expected: "CREATE TABLE t (is_active NUMBER(1))"
+  constructs: ["BOOLEAN"]
+  tags: ["numeric", "boolean", "p2o"]
+
+- name: numeric_to_number
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (price NUMERIC(10,2))"
+  expected: "CREATE TABLE t (price NUMBER(10,2))"
+  constructs: ["NUMERIC"]
+  tags: ["numeric", "decimal", "p2o"]
+
+# ---------------------------------------------------------------------------
+# BINARY / SPECIAL TYPES
+# ---------------------------------------------------------------------------
+
+- name: bytea_to_blob
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (data BYTEA)"
+  expected: "CREATE TABLE t (data BLOB)"
+  constructs: ["BYTEA"]
+  tags: ["binary", "lob", "p2o"]
+
+- name: uuid_to_raw16
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (id UUID)"
+  expected: "CREATE TABLE t (id RAW(16))"
+  constructs: ["UUID"]
+  tags: ["binary", "uuid", "p2o"]

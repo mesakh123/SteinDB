@@ -1,0 +1,105 @@
+# Oracle anonymous subselect → PostgreSQL requires alias
+# Reference: CYBERTEC Oracle-to-PostgreSQL migration guide
+# PostgreSQL requires every subquery in FROM/JOIN to have an alias.
+
+- name: anonymous_subselect_add_alias
+  category: syntax
+  oracle: "SELECT * FROM (SELECT id, name FROM employees)"
+  expected_postgresql: "SELECT * FROM (SELECT id, name FROM employees) AS subq"
+  complexity: 2
+  constructs: ["ANONYMOUS_SUBSELECT"]
+  tags: ["cybertec", "subselect"]
+
+- name: nested_anonymous_subselects
+  category: syntax
+  oracle: >
+    SELECT * FROM (
+      SELECT * FROM (
+        SELECT id, name FROM employees
+      )
+    )
+  expected_postgresql: >
+    SELECT * FROM (
+      SELECT * FROM (
+        SELECT id, name FROM employees
+      ) AS subq_inner
+    ) AS subq_outer
+  complexity: 4
+  constructs: ["ANONYMOUS_SUBSELECT"]
+  tags: ["cybertec", "subselect"]
+
+- name: anonymous_subselect_in_from
+  category: syntax
+  oracle: >
+    SELECT t.id, t.total
+    FROM (SELECT id, SUM(amount) AS total FROM orders GROUP BY id) t_missing_alias
+  expected_postgresql: >
+    SELECT t.id, t.total
+    FROM (SELECT id, SUM(amount) AS total FROM orders GROUP BY id) AS t
+  complexity: 3
+  constructs: ["ANONYMOUS_SUBSELECT"]
+  tags: ["cybertec", "subselect"]
+  acceptance_criteria:
+    - "Subselect in FROM clause must have an alias in PostgreSQL"
+
+- name: anonymous_subselect_in_join
+  category: syntax
+  oracle: >
+    SELECT e.name, d.dept_name
+    FROM employees e
+    JOIN (SELECT id, dept_name FROM departments WHERE active = 'Y') ON e.dept_id = id
+  expected_postgresql: >
+    SELECT e.name, d.dept_name
+    FROM employees e
+    JOIN (SELECT id, dept_name FROM departments WHERE active = 'Y') AS d ON e.dept_id = d.id
+  complexity: 4
+  constructs: ["ANONYMOUS_SUBSELECT"]
+  tags: ["cybertec", "subselect"]
+
+- name: inline_view_without_alias
+  category: syntax
+  oracle: >
+    SELECT col1, col2 FROM (
+      SELECT col1, col2, ROW_NUMBER() OVER (ORDER BY col1) rn FROM big_table
+    ) WHERE rn <= 10
+  expected_postgresql: >
+    SELECT col1, col2 FROM (
+      SELECT col1, col2, ROW_NUMBER() OVER (ORDER BY col1) AS rn FROM big_table
+    ) AS subq WHERE rn <= 10
+  complexity: 4
+  constructs: ["ANONYMOUS_SUBSELECT", "ROWNUM"]
+  tags: ["cybertec", "subselect"]
+
+- name: correlated_subquery_no_change
+  category: syntax
+  oracle: >
+    SELECT e.name, (SELECT d.dept_name FROM departments d WHERE d.id = e.dept_id) AS dept
+    FROM employees e
+  expected_postgresql: >
+    SELECT e.name, (SELECT d.dept_name FROM departments d WHERE d.id = e.dept_id) AS dept
+    FROM employees e
+  complexity: 2
+  constructs: ["CORRELATED_SUBQUERY"]
+  tags: ["cybertec", "subselect", "no_change"]
+
+- name: exists_subquery_no_change
+  category: syntax
+  oracle: >
+    SELECT * FROM employees e
+    WHERE EXISTS (SELECT 1 FROM departments d WHERE d.id = e.dept_id AND d.active = 'Y')
+  expected_postgresql: >
+    SELECT * FROM employees e
+    WHERE EXISTS (SELECT 1 FROM departments d WHERE d.id = e.dept_id AND d.active = 'Y')
+  complexity: 2
+  constructs: ["EXISTS_SUBQUERY"]
+  tags: ["cybertec", "subselect", "no_change"]
+
+- name: scalar_subquery_no_change
+  category: syntax
+  oracle: >
+    SELECT name, (SELECT MAX(salary) FROM employees) AS max_sal FROM employees
+  expected_postgresql: >
+    SELECT name, (SELECT MAX(salary) FROM employees) AS max_sal FROM employees
+  complexity: 2
+  constructs: ["SCALAR_SUBQUERY"]
+  tags: ["cybertec", "subselect", "no_change"]

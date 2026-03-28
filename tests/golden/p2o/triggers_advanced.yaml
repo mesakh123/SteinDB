@@ -1,0 +1,608 @@
+# =============================================================================
+# SteinDB Golden Tests — P2O Advanced Trigger Conversions
+# PostgreSQL trigger patterns → Oracle trigger equivalents
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# BASIC TRIGGER PATTERNS
+# ---------------------------------------------------------------------------
+
+- name: before_insert_trigger_merge_func
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION set_created_at()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      NEW.created_at := NOW();
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_set_created_at BEFORE INSERT ON orders
+    FOR EACH ROW EXECUTE FUNCTION set_created_at()
+  expected: >-
+    CREATE OR REPLACE TRIGGER trg_set_created_at BEFORE INSERT ON orders
+    FOR EACH ROW
+    BEGIN
+      :NEW.created_at := SYSDATE;
+    END;
+    /
+  complexity: 5
+  constructs: ["TRIGGER", "BEFORE INSERT", "FUNCTION"]
+  tags: ["trigger", "p2o"]
+  acceptance_criteria:
+    - "PG separates trigger function and trigger definition"
+    - "Oracle merges function body into trigger body"
+    - "NEW. becomes :NEW."
+
+- name: after_update_trigger
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION log_update()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      INSERT INTO audit_log (table_name, record_id, changed_at)
+      VALUES (TG_TABLE_NAME, NEW.id, NOW());
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_log_update AFTER UPDATE ON orders
+    FOR EACH ROW EXECUTE FUNCTION log_update()
+  expected: >-
+    CREATE OR REPLACE TRIGGER trg_log_update AFTER UPDATE ON orders
+    FOR EACH ROW
+    BEGIN
+      INSERT INTO audit_log (table_name, record_id, changed_at)
+      VALUES ('ORDERS', :NEW.id, SYSDATE);
+    END;
+    /
+  complexity: 5
+  constructs: ["TRIGGER", "AFTER UPDATE", "TG_TABLE_NAME"]
+  tags: ["trigger", "audit", "p2o"]
+
+- name: instead_of_trigger_on_view
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION update_employee_view()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      UPDATE employees SET name = NEW.name WHERE id = NEW.id;
+      UPDATE departments SET dept_name = NEW.dept_name WHERE id = NEW.dept_id;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_emp_view INSTEAD OF UPDATE ON employee_dept_view
+    FOR EACH ROW EXECUTE FUNCTION update_employee_view()
+  expected: >-
+    CREATE OR REPLACE TRIGGER trg_emp_view INSTEAD OF UPDATE ON employee_dept_view
+    FOR EACH ROW
+    BEGIN
+      UPDATE employees SET name = :NEW.name WHERE id = :NEW.id;
+      UPDATE departments SET dept_name = :NEW.dept_name WHERE id = :NEW.dept_id;
+    END;
+    /
+  complexity: 6
+  constructs: ["TRIGGER", "INSTEAD OF"]
+  tags: ["trigger", "view", "p2o"]
+
+- name: statement_level_trigger
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION notify_bulk_change()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      PERFORM pg_notify('table_changed', TG_TABLE_NAME);
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_bulk_notify AFTER INSERT ON orders
+    FOR EACH STATEMENT EXECUTE FUNCTION notify_bulk_change()
+  expected: >-
+    CREATE OR REPLACE TRIGGER trg_bulk_notify AFTER INSERT ON orders
+    BEGIN
+      /* pg_notify has no direct Oracle equivalent; use DBMS_AQ or DBMS_ALERT */
+      DBMS_ALERT.SIGNAL('table_changed', 'ORDERS');
+    END;
+    /
+  complexity: 6
+  constructs: ["TRIGGER", "STATEMENT LEVEL", "pg_notify"]
+  tags: ["trigger", "statement_level", "p2o"]
+
+- name: trigger_with_when_condition
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION check_salary()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      INSERT INTO salary_changes (emp_id, old_salary, new_salary)
+      VALUES (NEW.id, OLD.salary, NEW.salary);
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_salary_change AFTER UPDATE OF salary ON employees
+    FOR EACH ROW WHEN (OLD.salary IS DISTINCT FROM NEW.salary)
+    EXECUTE FUNCTION check_salary()
+  expected: >-
+    CREATE OR REPLACE TRIGGER trg_salary_change AFTER UPDATE OF salary ON employees
+    FOR EACH ROW WHEN (NVL(OLD.salary, -1) != NVL(NEW.salary, -1))
+    BEGIN
+      INSERT INTO salary_changes (emp_id, old_salary, new_salary)
+      VALUES (:NEW.id, :OLD.salary, :NEW.salary);
+    END;
+    /
+  complexity: 6
+  constructs: ["TRIGGER", "WHEN", "IS DISTINCT FROM"]
+  tags: ["trigger", "conditional", "p2o"]
+
+- name: trigger_calling_multiple_functions_to_compound
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    CREATE TRIGGER trg_before_orders BEFORE INSERT ON orders
+    FOR EACH ROW EXECUTE FUNCTION set_defaults();
+    CREATE TRIGGER trg_after_orders AFTER INSERT ON orders
+    FOR EACH ROW EXECUTE FUNCTION update_stats();
+    CREATE TRIGGER trg_after_orders_stmt AFTER INSERT ON orders
+    FOR EACH STATEMENT EXECUTE FUNCTION notify_changes()
+  expected: >-
+    CREATE OR REPLACE TRIGGER trg_orders_compound
+    FOR INSERT ON orders
+    COMPOUND TRIGGER
+      BEFORE EACH ROW IS
+      BEGIN
+        /* body of set_defaults */
+        NULL;
+      END BEFORE EACH ROW;
+      AFTER EACH ROW IS
+      BEGIN
+        /* body of update_stats */
+        NULL;
+      END AFTER EACH ROW;
+      AFTER STATEMENT IS
+      BEGIN
+        /* body of notify_changes */
+        NULL;
+      END AFTER STATEMENT;
+    END trg_orders_compound;
+    /
+  complexity: 8
+  constructs: ["TRIGGER", "COMPOUND TRIGGER"]
+  tags: ["trigger", "compound", "llm_required", "p2o"]
+
+- name: event_trigger_no_oracle_equivalent
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION log_ddl()
+    RETURNS event_trigger AS $$
+    BEGIN
+      INSERT INTO ddl_log (event, tag, timestamp)
+      VALUES (TG_EVENT, TG_TAG, NOW());
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE EVENT TRIGGER trg_ddl_log ON ddl_command_end
+    EXECUTE FUNCTION log_ddl()
+  expected: >-
+    /* PG event triggers have no direct Oracle equivalent */
+    /* Use Oracle system triggers on SCHEMA or DATABASE level */
+    CREATE OR REPLACE TRIGGER trg_ddl_log
+    AFTER DDL ON SCHEMA
+    BEGIN
+      INSERT INTO ddl_log (event, tag, timestamp)
+      VALUES (ORA_SYSEVENT, ORA_DICT_OBJ_NAME, SYSDATE);
+    END;
+    /
+  complexity: 7
+  constructs: ["EVENT TRIGGER"]
+  tags: ["trigger", "llm_required", "p2o"]
+
+- name: trigger_return_new
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION uppercase_name()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      NEW.name := UPPER(NEW.name);
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_upper BEFORE INSERT OR UPDATE ON contacts
+    FOR EACH ROW EXECUTE FUNCTION uppercase_name()
+  expected: >-
+    CREATE OR REPLACE TRIGGER trg_upper BEFORE INSERT OR UPDATE ON contacts
+    FOR EACH ROW
+    BEGIN
+      :NEW.name := UPPER(:NEW.name);
+    END;
+    /
+  constructs: ["TRIGGER", "RETURN NEW"]
+  tags: ["trigger", "p2o"]
+  acceptance_criteria:
+    - "RETURN NEW in PG is implicit in Oracle BEFORE triggers"
+    - "Oracle BEFORE row triggers modify :NEW directly"
+
+- name: trigger_return_null_skip_row
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION skip_if_empty()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      IF NEW.name IS NULL OR NEW.name = '' THEN
+        RETURN NULL;
+      END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_skip_empty BEFORE INSERT ON contacts
+    FOR EACH ROW EXECUTE FUNCTION skip_if_empty()
+  expected: >-
+    CREATE OR REPLACE TRIGGER trg_skip_empty BEFORE INSERT ON contacts
+    FOR EACH ROW
+    BEGIN
+      IF :NEW.name IS NULL OR :NEW.name = '' THEN
+        RAISE_APPLICATION_ERROR(-20001, 'Cannot insert empty name');
+      END IF;
+    END;
+    /
+  complexity: 5
+  constructs: ["TRIGGER", "RETURN NULL"]
+  tags: ["trigger", "p2o"]
+  acceptance_criteria:
+    - "RETURN NULL in PG BEFORE trigger silently skips the row"
+    - "Oracle has no equivalent; must raise error or use other logic"
+
+- name: trigger_tg_op_to_inserting_updating_deleting
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION audit_changes()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      IF TG_OP = 'INSERT' THEN
+        INSERT INTO audit_log (operation, record_id) VALUES ('INSERT', NEW.id);
+      ELSIF TG_OP = 'UPDATE' THEN
+        INSERT INTO audit_log (operation, record_id) VALUES ('UPDATE', NEW.id);
+      ELSIF TG_OP = 'DELETE' THEN
+        INSERT INTO audit_log (operation, record_id) VALUES ('DELETE', OLD.id);
+      END IF;
+      RETURN COALESCE(NEW, OLD);
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_audit AFTER INSERT OR UPDATE OR DELETE ON orders
+    FOR EACH ROW EXECUTE FUNCTION audit_changes()
+  expected: >-
+    CREATE OR REPLACE TRIGGER trg_audit AFTER INSERT OR UPDATE OR DELETE ON orders
+    FOR EACH ROW
+    BEGIN
+      IF INSERTING THEN
+        INSERT INTO audit_log (operation, record_id) VALUES ('INSERT', :NEW.id);
+      ELSIF UPDATING THEN
+        INSERT INTO audit_log (operation, record_id) VALUES ('UPDATE', :NEW.id);
+      ELSIF DELETING THEN
+        INSERT INTO audit_log (operation, record_id) VALUES ('DELETE', :OLD.id);
+      END IF;
+    END;
+    /
+  complexity: 5
+  constructs: ["TRIGGER", "TG_OP", "INSERTING", "UPDATING", "DELETING"]
+  tags: ["trigger", "audit", "p2o"]
+
+- name: trigger_with_perform
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION refresh_cache()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      PERFORM update_cache_table(NEW.category_id);
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_refresh AFTER INSERT ON products
+    FOR EACH ROW EXECUTE FUNCTION refresh_cache()
+  expected: >-
+    CREATE OR REPLACE TRIGGER trg_refresh AFTER INSERT ON products
+    FOR EACH ROW
+    BEGIN
+      update_cache_table(:NEW.category_id);
+    END;
+    /
+  constructs: ["TRIGGER", "PERFORM"]
+  tags: ["trigger", "p2o"]
+  acceptance_criteria:
+    - "PG PERFORM calls a function and discards the result"
+    - "Oracle just calls the procedure directly"
+
+- name: constraint_trigger_deferrable
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    CREATE CONSTRAINT TRIGGER trg_check_balance
+    AFTER INSERT OR UPDATE ON transactions
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW EXECUTE FUNCTION verify_balance()
+  expected: >-
+    /* Constraint triggers map to Oracle deferred triggers */
+    /* LLM-required: Oracle deferred constraint check via DBMS_SCHEDULER or application logic */
+    CREATE OR REPLACE TRIGGER trg_check_balance AFTER INSERT OR UPDATE ON transactions
+    FOR EACH ROW
+    BEGIN
+      /* verify_balance body inlined */
+      NULL;
+    END;
+    /
+    /* Note: Oracle triggers cannot be DEFERRABLE; use deferred constraints instead */
+  complexity: 7
+  constructs: ["CONSTRAINT TRIGGER", "DEFERRABLE"]
+  tags: ["trigger", "llm_required", "p2o"]
+
+- name: trigger_transition_tables_to_compound
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION process_batch()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      INSERT INTO order_summary (order_date, total)
+      SELECT order_date, SUM(amount) FROM new_table GROUP BY order_date;
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_batch_process AFTER INSERT ON orders
+    REFERENCING NEW TABLE AS new_table
+    FOR EACH STATEMENT EXECUTE FUNCTION process_batch()
+  expected: >-
+    CREATE OR REPLACE TRIGGER trg_batch_process
+    FOR INSERT ON orders
+    COMPOUND TRIGGER
+      TYPE t_order_rec IS RECORD (order_date DATE, amount NUMBER);
+      TYPE t_orders IS TABLE OF t_order_rec;
+      v_new_rows t_orders := t_orders();
+      AFTER EACH ROW IS
+      BEGIN
+        v_new_rows.EXTEND;
+        v_new_rows(v_new_rows.COUNT).order_date := :NEW.order_date;
+        v_new_rows(v_new_rows.COUNT).amount := :NEW.amount;
+      END AFTER EACH ROW;
+      AFTER STATEMENT IS
+      BEGIN
+        /* Process collected rows as batch */
+        FORALL i IN 1..v_new_rows.COUNT
+          INSERT INTO order_summary (order_date, total)
+          VALUES (v_new_rows(i).order_date, v_new_rows(i).amount);
+      END AFTER STATEMENT;
+    END trg_batch_process;
+    /
+  complexity: 9
+  constructs: ["TRIGGER", "TRANSITION TABLE", "COMPOUND TRIGGER"]
+  tags: ["trigger", "llm_required", "p2o"]
+
+- name: truncate_trigger_no_oracle_equivalent
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION log_truncate()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      INSERT INTO audit_log (operation, table_name, timestamp)
+      VALUES ('TRUNCATE', TG_TABLE_NAME, NOW());
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_log_truncate BEFORE TRUNCATE ON orders
+    FOR EACH STATEMENT EXECUTE FUNCTION log_truncate()
+  expected: >-
+    /* Oracle does not support TRUNCATE triggers */
+    /* Alternative: use DDL trigger on SCHEMA or wrap TRUNCATE in a procedure */
+    CREATE OR REPLACE TRIGGER trg_log_truncate
+    BEFORE DDL ON SCHEMA
+    BEGIN
+      IF ORA_SYSEVENT = 'TRUNCATE' AND ORA_DICT_OBJ_NAME = 'ORDERS' THEN
+        INSERT INTO audit_log (operation, table_name, timestamp)
+        VALUES ('TRUNCATE', 'ORDERS', SYSDATE);
+      END IF;
+    END;
+    /
+  complexity: 7
+  constructs: ["TRIGGER", "TRUNCATE"]
+  tags: ["trigger", "llm_required", "p2o"]
+
+# ---------------------------------------------------------------------------
+# ADDITIONAL TRIGGER PATTERNS
+# ---------------------------------------------------------------------------
+
+- name: trigger_tg_table_name_to_ora_dict_obj
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION generic_audit()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      INSERT INTO audit_log (table_name, action, ts)
+      VALUES (TG_TABLE_NAME, TG_OP, NOW());
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_audit_orders AFTER INSERT OR UPDATE ON orders
+    FOR EACH ROW EXECUTE FUNCTION generic_audit()
+  expected: >-
+    CREATE OR REPLACE TRIGGER trg_audit_orders AFTER INSERT OR UPDATE ON orders
+    FOR EACH ROW
+    BEGIN
+      INSERT INTO audit_log (table_name, action, ts)
+      VALUES ('ORDERS',
+        CASE WHEN INSERTING THEN 'INSERT' WHEN UPDATING THEN 'UPDATE' END,
+        SYSDATE);
+    END;
+    /
+  constructs: ["TRIGGER", "TG_TABLE_NAME", "TG_OP"]
+  tags: ["trigger", "audit", "p2o"]
+
+- name: trigger_new_old_record_access
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION track_price_change()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      IF OLD.price <> NEW.price THEN
+        INSERT INTO price_history (product_id, old_price, new_price, changed_at)
+        VALUES (OLD.id, OLD.price, NEW.price, NOW());
+      END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_price AFTER UPDATE ON products
+    FOR EACH ROW EXECUTE FUNCTION track_price_change()
+  expected: >-
+    CREATE OR REPLACE TRIGGER trg_price AFTER UPDATE ON products
+    FOR EACH ROW
+    BEGIN
+      IF :OLD.price <> :NEW.price THEN
+        INSERT INTO price_history (product_id, old_price, new_price, changed_at)
+        VALUES (:OLD.id, :OLD.price, :NEW.price, SYSDATE);
+      END IF;
+    END;
+    /
+  constructs: ["TRIGGER", "OLD", "NEW"]
+  tags: ["trigger", "p2o"]
+
+- name: trigger_raise_exception_to_raise_application_error
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION validate_order()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      IF NEW.quantity <= 0 THEN
+        RAISE EXCEPTION 'Quantity must be positive, got %', NEW.quantity;
+      END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_validate BEFORE INSERT ON order_items
+    FOR EACH ROW EXECUTE FUNCTION validate_order()
+  expected: >-
+    CREATE OR REPLACE TRIGGER trg_validate BEFORE INSERT ON order_items
+    FOR EACH ROW
+    BEGIN
+      IF :NEW.quantity <= 0 THEN
+        RAISE_APPLICATION_ERROR(-20001, 'Quantity must be positive, got ' || :NEW.quantity);
+      END IF;
+    END;
+    /
+  constructs: ["TRIGGER", "RAISE EXCEPTION"]
+  tags: ["trigger", "validation", "p2o"]
+
+- name: trigger_on_multiple_columns
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION log_sensitive_changes()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      INSERT INTO change_log (record_id, changed_fields) VALUES (NEW.id, 'email or phone');
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_sensitive AFTER UPDATE OF email, phone ON contacts
+    FOR EACH ROW EXECUTE FUNCTION log_sensitive_changes()
+  expected: >-
+    CREATE OR REPLACE TRIGGER trg_sensitive AFTER UPDATE OF email, phone ON contacts
+    FOR EACH ROW
+    BEGIN
+      INSERT INTO change_log (record_id, changed_fields) VALUES (:NEW.id, 'email or phone');
+    END;
+    /
+  constructs: ["TRIGGER", "UPDATE OF"]
+  tags: ["trigger", "p2o"]
+
+- name: trigger_with_exception_handling
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION safe_audit()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      BEGIN
+        INSERT INTO audit_log (record_id, action) VALUES (NEW.id, TG_OP);
+      EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'Audit failed: %', SQLERRM;
+      END;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_safe_audit AFTER INSERT ON orders
+    FOR EACH ROW EXECUTE FUNCTION safe_audit()
+  expected: >-
+    CREATE OR REPLACE TRIGGER trg_safe_audit AFTER INSERT ON orders
+    FOR EACH ROW
+    BEGIN
+      BEGIN
+        INSERT INTO audit_log (record_id, action) VALUES (:NEW.id, 'INSERT');
+      EXCEPTION WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Audit failed: ' || SQLERRM);
+      END;
+    END;
+    /
+  constructs: ["TRIGGER", "EXCEPTION", "SQLERRM"]
+  tags: ["trigger", "exception", "p2o"]
+
+- name: trigger_disable_enable
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    ALTER TABLE orders DISABLE TRIGGER trg_audit;
+    ALTER TABLE orders ENABLE TRIGGER trg_audit
+  expected: >-
+    ALTER TRIGGER trg_audit DISABLE;
+    ALTER TRIGGER trg_audit ENABLE
+  constructs: ["DISABLE TRIGGER", "ENABLE TRIGGER"]
+  tags: ["trigger", "p2o"]
+  acceptance_criteria:
+    - "PG disables trigger via ALTER TABLE ... DISABLE TRIGGER"
+    - "Oracle disables trigger via ALTER TRIGGER ... DISABLE"
+
+- name: trigger_drop
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: "DROP TRIGGER IF EXISTS trg_audit ON orders"
+  expected: >-
+    /* Oracle DROP TRIGGER does not reference table name */
+    BEGIN
+      EXECUTE IMMEDIATE 'DROP TRIGGER trg_audit';
+    EXCEPTION WHEN OTHERS THEN
+      IF SQLCODE != -4080 THEN RAISE; END IF;
+    END;
+    /
+  constructs: ["DROP TRIGGER", "IF EXISTS"]
+  tags: ["trigger", "p2o"]
+
+- name: trigger_for_insert_update_delete
+  category: p2o_triggers
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION update_modified()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      NEW.updated_at := NOW();
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_modified BEFORE INSERT OR UPDATE ON documents
+    FOR EACH ROW EXECUTE FUNCTION update_modified()
+  expected: >-
+    CREATE OR REPLACE TRIGGER trg_modified BEFORE INSERT OR UPDATE ON documents
+    FOR EACH ROW
+    BEGIN
+      :NEW.updated_at := SYSDATE;
+    END;
+    /
+  constructs: ["TRIGGER", "BEFORE INSERT OR UPDATE"]
+  tags: ["trigger", "p2o"]

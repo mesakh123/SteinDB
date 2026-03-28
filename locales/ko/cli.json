@@ -1,0 +1,53 @@
+{
+  "commands": {
+    "scan": {
+      "help": "Oracle/PostgreSQL 스키마를 스캔하고 마이그레이션 준비 보고서를 생성합니다",
+      "scanning": "{file} 스캔 중...",
+      "found_objects": "{count}개의 객체를 발견했습니다",
+      "complexity": "복잡도: {score}/10",
+      "complete": "스캔 완료 ({seconds}초)"
+    },
+    "convert": {
+      "help": "Oracle SQL/PL-SQL을 PostgreSQL로 변환합니다 (역방향도 지원)",
+      "converting": "{count}개의 객체를 변환 중...",
+      "rules_only": "규칙 전용 모드 사용 중 (90% 커버리지)",
+      "ai_required": "AI 지원 변환에는 등록(무료)이 필요합니다.\n등록: stein auth register --email you@company.com\n또는 규칙 전용 모드 사용: stein convert myfile.sql",
+      "complete": "{converted}/{total}개의 객체를 변환했습니다",
+      "forwarded": "{count}개의 객체가 AI로 전달되었습니다"
+    },
+    "verify": {
+      "help": "변환된 PostgreSQL/Oracle 출력의 정확성을 검증합니다",
+      "verifying": "{count}개의 파일을 검증 중...",
+      "green": "그린 — 높은 신뢰도",
+      "yellow": "옐로 — 검토 권장",
+      "red": "레드 — 수동 수정 필요"
+    },
+    "auth": {
+      "register_help": "무료 SteinDB 계정을 등록합니다",
+      "register_success": "등록이 완료되었습니다!",
+      "register_prompt": "이메일 주소",
+      "login_help": "기존 토큰으로 로그인합니다",
+      "logout_help": "저장된 토큰을 제거합니다",
+      "logout_success": "로그아웃되었습니다. 토큰 없이도 규칙 전용 모드를 계속 사용할 수 있습니다.",
+      "status_help": "현재 인증 상태를 표시합니다",
+      "status_authenticated": "인증됨",
+      "status_not_authenticated": "인증되지 않음",
+      "upgrade_help": "유료 플랜으로 업그레이드합니다"
+    }
+  },
+  "errors": {
+    "file_not_found": "파일을 찾을 수 없습니다: {path}",
+    "invalid_sql": "잘못된 SQL 입력입니다",
+    "connection_failed": "연결 실패: {error}",
+    "no_objects": "입력에서 객체를 찾을 수 없습니다"
+  },
+  "report": {
+    "title": "SteinDB 마이그레이션 보고서",
+    "summary": "요약",
+    "total_objects": "총 객체 수",
+    "auto_convertible": "자동 변환 가능",
+    "needs_ai": "AI 지원 필요",
+    "complexity_avg": "평균 복잡도",
+    "savings_estimate": "예상 비용 절감"
+  }
+}

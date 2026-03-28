@@ -1,0 +1,58 @@
+{
+  "app_name": "SteinDB",
+  "tagline": "Công cụ di chuyển hai chiều Oracle ↔ PostgreSQL duy nhất",
+  "directions": {
+    "o2p": "Oracle sang PostgreSQL",
+    "p2o": "PostgreSQL sang Oracle"
+  },
+  "tiers": {
+    "free": "Miễn phí",
+    "registered": "Đã đăng ký",
+    "solo": "Solo",
+    "team": "Nhóm",
+    "enterprise": "Doanh nghiệp"
+  },
+  "roles": {
+    "owner": "Chủ sở hữu",
+    "admin": "Quản trị viên",
+    "member": "Thành viên",
+    "viewer": "Người xem"
+  },
+  "actions": {
+    "save": "Lưu",
+    "cancel": "Hủy",
+    "delete": "Xóa",
+    "edit": "Chỉnh sửa",
+    "create": "Tạo",
+    "search": "Tìm kiếm",
+    "filter": "Lọc",
+    "export": "Xuất",
+    "download": "Tải xuống",
+    "copy": "Sao chép",
+    "copied": "Đã sao chép!",
+    "loading": "Đang tải...",
+    "submit": "Gửi",
+    "confirm": "Xác nhận",
+    "back": "Quay lại",
+    "next": "Tiếp theo",
+    "upgrade": "Nâng cấp",
+    "register": "Đăng ký",
+    "login": "Đăng nhập",
+    "logout": "Đăng xuất"
+  },
+  "status": {
+    "active": "Hoạt động",
+    "inactive": "Không hoạt động",
+    "success": "Thành công",
+    "failed": "Thất bại",
+    "partial": "Một phần",
+    "pending": "Đang chờ"
+  },
+  "time": {
+    "just_now": "vừa xong",
+    "minutes_ago": "{n} phút trước",
+    "hours_ago": "{n} giờ trước",
+    "days_ago": "{n} ngày trước",
+    "yesterday": "hôm qua"
+  }
+}

@@ -1,0 +1,329 @@
+# =============================================================================
+# SteinDB Golden Tests — Advanced Trigger Patterns
+# Auto-increment, LOGON, COMPOUND, REFERENCING, cascading, ordering
+# =============================================================================
+
+- name: auto_increment_identity
+  category: triggers
+  oracle: |
+    CREATE OR REPLACE TRIGGER trg_cust_id
+    BEFORE INSERT ON customers
+    FOR EACH ROW
+    BEGIN
+      IF :NEW.id IS NULL THEN
+        SELECT cust_seq.NEXTVAL INTO :NEW.id FROM DUAL;
+      END IF;
+    END;
+  expected_postgresql: |
+    ALTER TABLE customers ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY;
+  complexity: 2
+  constructs: ["TRIGGER", "SEQUENCE", "IDENTITY"]
+  tags: ["identity_pattern"]
+
+- name: auto_increment_nextval_default
+  category: triggers
+  oracle: |
+    CREATE OR REPLACE TRIGGER trg_order_id
+    BEFORE INSERT ON orders
+    FOR EACH ROW
+    BEGIN
+      :NEW.id := order_seq.NEXTVAL;
+    END;
+  expected_postgresql: |
+    ALTER TABLE orders ALTER COLUMN id SET DEFAULT nextval('order_seq');
+  complexity: 2
+  constructs: ["TRIGGER", "SEQUENCE", "NEXTVAL"]
+  tags: ["identity_pattern"]
+
+- name: logon_trigger_removed
+  category: triggers
+  oracle: |
+    CREATE OR REPLACE TRIGGER trg_logon_audit
+    AFTER LOGON ON SCHEMA
+    BEGIN
+      INSERT INTO login_audit (username, login_time)
+      VALUES (USER, SYSDATE);
+    END;
+  expected_postgresql: |
+    -- WARNING: LOGON triggers have no PostgreSQL equivalent.
+    -- Move this logic to application-level authentication or use
+    -- a connection pooler hook (e.g., PgBouncer auth_query).
+    -- Original: audit login events for schema users.
+  complexity: 1
+  constructs: ["TRIGGER", "LOGON"]
+  tags: ["unsupported", "manual_review"]
+
+- name: cascading_triggers
+  category: triggers
+  oracle: |
+    CREATE OR REPLACE TRIGGER trg_cascade_audit
+    AFTER INSERT ON orders
+    FOR EACH ROW
+    BEGIN
+      INSERT INTO order_audit (order_id, action, ts)
+      VALUES (:NEW.id, 'INSERT', SYSDATE);
+      INSERT INTO notifications (msg, created_at)
+      VALUES ('New order ' || :NEW.id, SYSDATE);
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION trg_cascade_audit_func() RETURNS TRIGGER AS $$
+    BEGIN
+      INSERT INTO order_audit (order_id, action, ts)
+      VALUES (NEW.id, 'INSERT', CURRENT_TIMESTAMP);
+      INSERT INTO notifications (msg, created_at)
+      VALUES ('New order ' || NEW.id, CURRENT_TIMESTAMP);
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_cascade_audit AFTER INSERT ON orders FOR EACH ROW EXECUTE FUNCTION trg_cascade_audit_func();
+  complexity: 4
+  constructs: ["TRIGGER", "AFTER INSERT", ":NEW", "SYSDATE"]
+
+- name: trigger_complex_when
+  category: triggers
+  oracle: |
+    CREATE OR REPLACE TRIGGER trg_salary_band
+    BEFORE UPDATE OF salary ON employees
+    FOR EACH ROW
+    WHEN (NEW.salary > 200000 OR (NEW.department_id = 10 AND NEW.salary > OLD.salary * 1.5))
+    BEGIN
+      RAISE_APPLICATION_ERROR(-20010, 'Salary change requires VP approval');
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION trg_salary_band_func() RETURNS TRIGGER AS $$
+    BEGIN
+      IF NEW.salary > 200000 OR (NEW.department_id = 10 AND NEW.salary > OLD.salary * 1.5) THEN
+        RAISE EXCEPTION 'Salary change requires VP approval';
+      END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_salary_band BEFORE UPDATE OF salary ON employees FOR EACH ROW EXECUTE FUNCTION trg_salary_band_func();
+  complexity: 5
+  constructs: ["TRIGGER", "WHEN", "RAISE_APPLICATION_ERROR"]
+
+- name: compound_trigger
+  category: triggers
+  oracle: |
+    CREATE OR REPLACE TRIGGER trg_emp_compound
+    FOR INSERT ON employees
+    COMPOUND TRIGGER
+      v_count NUMBER := 0;
+    BEFORE STATEMENT IS
+    BEGIN
+      v_count := 0;
+    END BEFORE STATEMENT;
+    BEFORE EACH ROW IS
+    BEGIN
+      :NEW.created_at := SYSDATE;
+      v_count := v_count + 1;
+    END BEFORE EACH ROW;
+    AFTER STATEMENT IS
+    BEGIN
+      INSERT INTO batch_log (table_name, row_count, ts)
+      VALUES ('employees', v_count, SYSDATE);
+    END AFTER STATEMENT;
+    END trg_emp_compound;
+  expected_postgresql: |
+    -- Compound trigger decomposed into separate triggers sharing state via session variable.
+    -- BEFORE STATEMENT: initialize the row counter
+    CREATE OR REPLACE FUNCTION trg_emp_compound_before_stmt_func() RETURNS TRIGGER AS $$
+    BEGIN
+      PERFORM set_config('trg_emp_compound.row_count', '0', true);
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_emp_compound_before_stmt BEFORE INSERT ON employees FOR EACH STATEMENT EXECUTE FUNCTION trg_emp_compound_before_stmt_func();
+    -- BEFORE EACH ROW: set defaults and increment counter
+    CREATE OR REPLACE FUNCTION trg_emp_compound_before_row_func() RETURNS TRIGGER AS $$
+    BEGIN
+      NEW.created_at := CURRENT_TIMESTAMP;
+      PERFORM set_config('trg_emp_compound.row_count',
+        (current_setting('trg_emp_compound.row_count')::INTEGER + 1)::TEXT, true);
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_emp_compound_before_row BEFORE INSERT ON employees FOR EACH ROW EXECUTE FUNCTION trg_emp_compound_before_row_func();
+    -- AFTER STATEMENT: log the accumulated row count
+    CREATE OR REPLACE FUNCTION trg_emp_compound_after_stmt_func() RETURNS TRIGGER AS $$
+    BEGIN
+      INSERT INTO batch_log (table_name, row_count, ts)
+      VALUES ('employees', current_setting('trg_emp_compound.row_count')::INTEGER, CURRENT_TIMESTAMP);
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_emp_compound_after_stmt AFTER INSERT ON employees FOR EACH STATEMENT EXECUTE FUNCTION trg_emp_compound_after_stmt_func();
+  complexity: 8
+  constructs: ["COMPOUND TRIGGER", "BEFORE STATEMENT", "BEFORE EACH ROW", "AFTER STATEMENT"]
+  tags: ["manual_review"]
+
+- name: trigger_referencing
+  category: triggers
+  oracle: |
+    CREATE OR REPLACE TRIGGER trg_emp_ref
+    BEFORE UPDATE ON employees
+    FOR EACH ROW
+    REFERENCING NEW AS new_emp OLD AS old_emp
+    BEGIN
+      IF :new_emp.salary < :old_emp.salary THEN
+        RAISE_APPLICATION_ERROR(-20003, 'Cannot decrease salary');
+      END IF;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION trg_emp_ref_func() RETURNS TRIGGER AS $$
+    BEGIN
+      IF NEW.salary < OLD.salary THEN
+        RAISE EXCEPTION 'Cannot decrease salary';
+      END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_emp_ref BEFORE UPDATE ON employees FOR EACH ROW EXECUTE FUNCTION trg_emp_ref_func();
+  complexity: 4
+  constructs: ["TRIGGER", "REFERENCING", "RAISE_APPLICATION_ERROR"]
+
+- name: multiple_triggers_ordering
+  category: triggers
+  oracle: |
+    CREATE OR REPLACE TRIGGER trg_emp_validate
+    BEFORE INSERT ON employees
+    FOR EACH ROW
+    BEGIN
+      IF :NEW.name IS NULL THEN
+        RAISE_APPLICATION_ERROR(-20004, 'Name required');
+      END IF;
+    END;
+    /
+    CREATE OR REPLACE TRIGGER trg_emp_defaults
+    BEFORE INSERT ON employees
+    FOR EACH ROW
+    FOLLOWS trg_emp_validate
+    BEGIN
+      :NEW.created_at := SYSDATE;
+      :NEW.status := 'ACTIVE';
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION trg_emp_validate_func() RETURNS TRIGGER AS $$
+    BEGIN
+      IF NEW.name IS NULL THEN
+        RAISE EXCEPTION 'Name required';
+      END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_emp_validate BEFORE INSERT ON employees FOR EACH ROW EXECUTE FUNCTION trg_emp_validate_func();
+    CREATE OR REPLACE FUNCTION trg_emp_defaults_func() RETURNS TRIGGER AS $$
+    BEGIN
+      NEW.created_at := CURRENT_TIMESTAMP;
+      NEW.status := 'ACTIVE';
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_emp_defaults BEFORE INSERT ON employees FOR EACH ROW EXECUTE FUNCTION trg_emp_defaults_func();
+  complexity: 5
+  constructs: ["TRIGGER", "FOLLOWS", "ORDERING"]
+  tags: ["manual_review"]
+  acceptance_criteria:
+    - "PostgreSQL triggers on same table fire in alphabetical order by trigger name"
+    - "FOLLOWS clause has no direct PostgreSQL equivalent; rely on naming convention"
+
+- name: logoff_trigger_removed
+  category: triggers
+  oracle: |
+    CREATE OR REPLACE TRIGGER trg_logoff_cleanup
+    BEFORE LOGOFF ON SCHEMA
+    BEGIN
+      DELETE FROM temp_session_data WHERE username = USER;
+    END;
+  expected_postgresql: |
+    -- WARNING: LOGOFF triggers have no PostgreSQL equivalent.
+    -- Move cleanup logic to application-level session management
+    -- or use a connection pooler disconnect hook.
+  complexity: 1
+  constructs: ["TRIGGER", "LOGOFF"]
+  tags: ["unsupported", "manual_review"]
+
+- name: ddl_trigger_removed
+  category: triggers
+  oracle: |
+    CREATE OR REPLACE TRIGGER trg_ddl_audit
+    AFTER DDL ON SCHEMA
+    BEGIN
+      INSERT INTO ddl_log (event, object_name, ts)
+      VALUES (ORA_SYSEVENT, ORA_DICT_OBJ_NAME, SYSDATE);
+    END;
+  expected_postgresql: |
+    -- WARNING: DDL triggers via Oracle AFTER DDL ON SCHEMA have no direct PostgreSQL equivalent.
+    -- Use event triggers: CREATE EVENT TRIGGER for ddl_command_start / ddl_command_end.
+    CREATE OR REPLACE FUNCTION trg_ddl_audit_func() RETURNS event_trigger AS $$
+    BEGIN
+      INSERT INTO ddl_log (event, object_name, ts)
+      VALUES (TG_EVENT, TG_TAG, CURRENT_TIMESTAMP);
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE EVENT TRIGGER trg_ddl_audit ON ddl_command_end EXECUTE FUNCTION trg_ddl_audit_func();
+  complexity: 6
+  constructs: ["TRIGGER", "DDL TRIGGER", "EVENT TRIGGER"]
+  tags: ["manual_review"]
+
+- name: trigger_inserting_updating_deleting
+  category: triggers
+  oracle: |
+    CREATE OR REPLACE TRIGGER trg_emp_dml
+    BEFORE INSERT OR UPDATE OR DELETE ON employees
+    FOR EACH ROW
+    BEGIN
+      IF INSERTING THEN
+        :NEW.created_at := SYSDATE;
+      ELSIF UPDATING THEN
+        :NEW.updated_at := SYSDATE;
+      ELSIF DELETING THEN
+        INSERT INTO deleted_employees (id, name) VALUES (:OLD.id, :OLD.name);
+      END IF;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION trg_emp_dml_func() RETURNS TRIGGER AS $$
+    BEGIN
+      IF TG_OP = 'INSERT' THEN
+        NEW.created_at := CURRENT_TIMESTAMP;
+        RETURN NEW;
+      ELSIF TG_OP = 'UPDATE' THEN
+        NEW.updated_at := CURRENT_TIMESTAMP;
+        RETURN NEW;
+      ELSIF TG_OP = 'DELETE' THEN
+        INSERT INTO deleted_employees (id, name) VALUES (OLD.id, OLD.name);
+        RETURN OLD;
+      END IF;
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_emp_dml BEFORE INSERT OR UPDATE OR DELETE ON employees FOR EACH ROW EXECUTE FUNCTION trg_emp_dml_func();
+  complexity: 6
+  constructs: ["TRIGGER", "INSERTING", "UPDATING", "DELETING", "TG_OP"]
+
+- name: trigger_autonomous_transaction
+  category: triggers
+  oracle: |
+    CREATE OR REPLACE TRIGGER trg_error_log
+    AFTER INSERT ON error_events
+    FOR EACH ROW
+    DECLARE
+      PRAGMA AUTONOMOUS_TRANSACTION;
+    BEGIN
+      INSERT INTO error_log (event_id, logged_at) VALUES (:NEW.id, SYSDATE);
+      COMMIT;
+    END;
+  expected_postgresql: |
+    -- WARNING: PRAGMA AUTONOMOUS_TRANSACTION has no direct PostgreSQL equivalent.
+    -- Use dblink or pg_background to simulate autonomous transactions.
+    CREATE OR REPLACE FUNCTION trg_error_log_func() RETURNS TRIGGER AS $$
+    BEGIN
+      PERFORM dblink_exec('dbname=' || current_database(),
+        'INSERT INTO error_log (event_id, logged_at) VALUES (' || NEW.id || ', CURRENT_TIMESTAMP)');
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_error_log AFTER INSERT ON error_events FOR EACH ROW EXECUTE FUNCTION trg_error_log_func();
+  complexity: 8
+  constructs: ["TRIGGER", "AUTONOMOUS_TRANSACTION", "PRAGMA"]
+  tags: ["manual_review"]

@@ -1,0 +1,265 @@
+# =============================================================================
+# SteinDB Golden Tests — Oracle Built-in Functions (O2P)
+# Missing built-in function mappings identified by external reviewers
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# DBMS_LOB functions
+# ---------------------------------------------------------------------------
+
+- name: dbms_lob_getlength
+  category: functions
+  oracle: "SELECT DBMS_LOB.GETLENGTH(document) FROM files WHERE id = 1"
+  expected_postgresql: "SELECT OCTET_LENGTH(document) FROM files WHERE id = 1"
+  complexity: 3
+  constructs: ["DBMS_LOB"]
+  tags: ["lob", "reviewer_gap"]
+  acceptance_criteria:
+    - "DBMS_LOB.GETLENGTH maps to OCTET_LENGTH for BYTEA, LENGTH for TEXT"
+
+- name: dbms_lob_substr
+  category: functions
+  oracle: "SELECT DBMS_LOB.SUBSTR(content, 100, 1) FROM documents"
+  expected_postgresql: "SELECT SUBSTRING(content FROM 1 FOR 100) FROM documents"
+  complexity: 3
+  constructs: ["DBMS_LOB"]
+  tags: ["lob", "reviewer_gap"]
+  acceptance_criteria:
+    - "DBMS_LOB.SUBSTR(lob, amount, offset) maps to SUBSTRING(col FROM offset FOR amount)"
+    - "Note parameter order difference: Oracle is (lob, amount, offset)"
+
+# ---------------------------------------------------------------------------
+# UTL_RAW
+# ---------------------------------------------------------------------------
+
+- name: utl_raw_cast_to_varchar2
+  category: functions
+  oracle: "SELECT UTL_RAW.CAST_TO_VARCHAR2(raw_col) FROM raw_data"
+  expected_postgresql: "SELECT ENCODE(raw_col, 'escape') FROM raw_data"
+  complexity: 4
+  constructs: ["UTL_RAW"]
+  tags: ["raw", "reviewer_gap"]
+  acceptance_criteria:
+    - "UTL_RAW.CAST_TO_VARCHAR2 converts raw bytes to varchar"
+    - "PG ENCODE with 'escape' provides similar functionality"
+
+# ---------------------------------------------------------------------------
+# DBMS_RANDOM
+# ---------------------------------------------------------------------------
+
+- name: dbms_random_value
+  category: functions
+  oracle: "SELECT DBMS_RANDOM.VALUE FROM DUAL"
+  expected_postgresql: "SELECT random()"
+  complexity: 2
+  constructs: ["DBMS_RANDOM", "DUAL"]
+  tags: ["random", "reviewer_gap"]
+  acceptance_criteria:
+    - "DBMS_RANDOM.VALUE returns 0-1 random number, same as PG random()"
+
+- name: dbms_random_value_range
+  category: functions
+  oracle: "SELECT DBMS_RANDOM.VALUE(1, 100) FROM DUAL"
+  expected_postgresql: "SELECT floor(random() * 100 + 1)::INTEGER"
+  complexity: 3
+  constructs: ["DBMS_RANDOM", "DUAL"]
+  tags: ["random", "reviewer_gap"]
+  acceptance_criteria:
+    - "DBMS_RANDOM.VALUE(low, high) returns random number in range"
+
+# ---------------------------------------------------------------------------
+# DBMS_UTILITY
+# ---------------------------------------------------------------------------
+
+- name: dbms_utility_format_error_backtrace
+  category: functions
+  oracle: |
+    BEGIN
+      NULL;
+    EXCEPTION WHEN OTHERS THEN
+      DBMS_OUTPUT.PUT_LINE(DBMS_UTILITY.FORMAT_ERROR_BACKTRACE);
+    END;
+  expected_postgresql: |
+    BEGIN
+      NULL;
+    EXCEPTION WHEN OTHERS THEN
+      DECLARE
+        v_stack TEXT;
+      BEGIN
+        GET STACKED DIAGNOSTICS v_stack = PG_EXCEPTION_CONTEXT;
+        RAISE NOTICE '%', v_stack;
+      END;
+    END;
+  complexity: 6
+  constructs: ["DBMS_UTILITY", "FORMAT_ERROR_BACKTRACE"]
+  tags: ["diagnostics", "reviewer_gap"]
+  acceptance_criteria:
+    - "DBMS_UTILITY.FORMAT_ERROR_BACKTRACE maps to GET STACKED DIAGNOSTICS"
+
+# ---------------------------------------------------------------------------
+# SYS_GUID
+# ---------------------------------------------------------------------------
+
+- name: sys_guid
+  category: functions
+  oracle: "SELECT SYS_GUID() FROM DUAL"
+  expected_postgresql: "SELECT gen_random_uuid()"
+  complexity: 2
+  constructs: ["SYS_GUID", "DUAL"]
+  tags: ["uuid", "reviewer_gap"]
+  acceptance_criteria:
+    - "SYS_GUID() returns 32-char hex; gen_random_uuid() returns UUID type"
+    - "Format differs but both provide globally unique identifiers"
+
+# ---------------------------------------------------------------------------
+# USERENV
+# ---------------------------------------------------------------------------
+
+- name: userenv_sessionid
+  category: functions
+  oracle: "SELECT USERENV('SESSIONID') FROM DUAL"
+  expected_postgresql: "SELECT pg_backend_pid()"
+  complexity: 3
+  constructs: ["USERENV", "DUAL"]
+  tags: ["session", "reviewer_gap"]
+  acceptance_criteria:
+    - "USERENV('SESSIONID') maps to pg_backend_pid()"
+    - "Not exact equivalent but serves similar purpose"
+
+# ---------------------------------------------------------------------------
+# ORA_HASH
+# ---------------------------------------------------------------------------
+
+- name: ora_hash
+  category: functions
+  oracle: "SELECT ORA_HASH(employee_name) FROM employees"
+  expected_postgresql: "SELECT hashtext(employee_name::TEXT) FROM employees"
+  complexity: 3
+  constructs: ["ORA_HASH"]
+  tags: ["hash", "reviewer_gap"]
+  acceptance_criteria:
+    - "ORA_HASH returns a hash bucket number"
+    - "PG hashtext() returns integer hash; ranges differ"
+
+# ---------------------------------------------------------------------------
+# REGEXP_COUNT
+# ---------------------------------------------------------------------------
+
+- name: regexp_count
+  category: functions
+  oracle: "SELECT REGEXP_COUNT('hello world hello', 'hello') FROM DUAL"
+  expected_postgresql: "SELECT (SELECT COUNT(*) FROM regexp_matches('hello world hello', 'hello', 'g'))"
+  complexity: 5
+  constructs: ["REGEXP_COUNT", "DUAL"]
+  tags: ["regexp", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle REGEXP_COUNT has no direct PG function"
+    - "Use COUNT over regexp_matches with 'g' flag"
+
+# ---------------------------------------------------------------------------
+# DUMP and VSIZE
+# ---------------------------------------------------------------------------
+
+- name: dump_no_equivalent
+  category: functions
+  oracle: "SELECT DUMP(salary) FROM employees WHERE id = 1"
+  expected_postgresql: null
+  complexity: 8
+  constructs: ["DUMP"]
+  tags: ["no_pg_equivalent", "manual_required", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle DUMP() shows internal representation; no PG equivalent"
+    - "Flag for manual review"
+
+- name: vsize_to_pg_column_size
+  category: functions
+  oracle: "SELECT VSIZE(name) FROM employees"
+  expected_postgresql: "SELECT pg_column_size(name) FROM employees"
+  complexity: 3
+  constructs: ["VSIZE"]
+  tags: ["introspection", "reviewer_gap"]
+  acceptance_criteria:
+    - "VSIZE returns bytes used; pg_column_size is closest equivalent"
+    - "Values may differ due to encoding differences"
+
+# ---------------------------------------------------------------------------
+# XML functions
+# ---------------------------------------------------------------------------
+
+- name: xmlelement_xmlforest
+  category: functions
+  oracle: >-
+    SELECT XMLELEMENT("employee",
+      XMLFOREST(first_name AS "firstName", last_name AS "lastName"))
+    FROM employees
+  expected_postgresql: >-
+    SELECT XMLELEMENT(NAME "employee",
+      XMLFOREST(first_name AS "firstName", last_name AS "lastName"))
+    FROM employees
+  complexity: 5
+  constructs: ["XMLELEMENT", "XMLFOREST"]
+  tags: ["xml", "reviewer_gap"]
+  acceptance_criteria:
+    - "PG XMLELEMENT requires NAME keyword before element name"
+    - "XMLFOREST syntax is compatible between Oracle and PG"
+
+- name: xmlagg
+  category: functions
+  oracle: >-
+    SELECT department_id,
+      XMLAGG(XMLELEMENT("emp", employee_name) ORDER BY employee_name)
+    FROM employees GROUP BY department_id
+  expected_postgresql: >-
+    SELECT department_id,
+      XMLAGG(XMLELEMENT(NAME "emp", employee_name) ORDER BY employee_name)
+    FROM employees GROUP BY department_id
+  complexity: 5
+  constructs: ["XMLAGG", "XMLELEMENT"]
+  tags: ["xml", "reviewer_gap"]
+  acceptance_criteria:
+    - "XMLAGG works similarly in both Oracle and PG"
+    - "XMLELEMENT inside needs NAME keyword fix"
+
+# ---------------------------------------------------------------------------
+# JSON functions (Oracle → PG)
+# ---------------------------------------------------------------------------
+
+- name: json_table
+  category: functions
+  oracle: >-
+    SELECT jt.name, jt.age
+    FROM orders o,
+    JSON_TABLE(o.json_data, '$.items[*]'
+      COLUMNS (name VARCHAR2(100) PATH '$.name',
+               age NUMBER PATH '$.age')) jt
+  expected_postgresql: >-
+    SELECT jt.name, jt.age
+    FROM orders o,
+    jsonb_to_recordset(o.json_data->'items')
+    AS jt(name VARCHAR(100), age NUMERIC)
+  complexity: 7
+  constructs: ["JSON_TABLE"]
+  tags: ["json", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle JSON_TABLE maps to PG jsonb_to_recordset for arrays"
+    - "JSON path expressions differ between Oracle and PG"
+
+- name: json_value
+  category: functions
+  oracle: "SELECT JSON_VALUE(data, '$.name') FROM orders"
+  expected_postgresql: "SELECT data->>'name' FROM orders"
+  complexity: 3
+  constructs: ["JSON_VALUE"]
+  tags: ["json", "reviewer_gap"]
+  acceptance_criteria:
+    - "JSON_VALUE extracts scalar; PG ->> operator returns text"
+
+- name: json_query
+  category: functions
+  oracle: "SELECT JSON_QUERY(data, '$.address') FROM customers"
+  expected_postgresql: "SELECT data->'address' FROM customers"
+  complexity: 3
+  constructs: ["JSON_QUERY"]
+  tags: ["json", "reviewer_gap"]
+  acceptance_criteria:
+    - "JSON_QUERY extracts object/array; PG -> operator returns jsonb"

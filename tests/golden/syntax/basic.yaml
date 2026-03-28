@@ -1,0 +1,78 @@
+- name: nvl_to_coalesce
+  category: syntax
+  oracle: "SELECT NVL(name, 'Unknown') FROM employees"
+  expected_postgresql: "SELECT COALESCE(name, 'Unknown') FROM employees"
+  constructs: ["NVL"]
+
+- name: sysdate_to_current_timestamp
+  category: syntax
+  oracle: "SELECT SYSDATE FROM DUAL"
+  expected_postgresql: "SELECT CURRENT_TIMESTAMP"
+  constructs: ["SYSDATE", "DUAL"]
+
+- name: decode_to_case
+  category: syntax
+  oracle: "SELECT DECODE(status, 1, 'Active', 2, 'Inactive', 'Unknown') FROM t"
+  expected_postgresql: "SELECT CASE status WHEN 1 THEN 'Active' WHEN 2 THEN 'Inactive' ELSE 'Unknown' END FROM t"
+  constructs: ["DECODE"]
+
+- name: rownum_to_limit
+  category: syntax
+  oracle: "SELECT * FROM employees WHERE ROWNUM <= 10"
+  expected_postgresql: "SELECT * FROM employees LIMIT 10"
+  constructs: ["ROWNUM"]
+
+- name: nvl2_to_case
+  category: syntax
+  oracle: "SELECT NVL2(comm, salary + comm, salary) FROM emp"
+  expected_postgresql: "SELECT CASE WHEN comm IS NOT NULL THEN salary + comm ELSE salary END FROM emp"
+  constructs: ["NVL2"]
+
+- name: dual_removal
+  category: syntax
+  oracle: "SELECT 1 FROM DUAL"
+  expected_postgresql: "SELECT 1"
+  constructs: ["DUAL"]
+
+- name: concat_operator
+  category: syntax
+  oracle: "SELECT first_name || ' ' || last_name FROM employees"
+  expected_postgresql: "SELECT first_name || ' ' || last_name FROM employees"
+  constructs: ["CONCAT"]
+  tags: ["no_change"]
+
+- name: systimestamp_to_clock_timestamp
+  category: syntax
+  oracle: "SELECT SYSTIMESTAMP FROM DUAL"
+  expected_postgresql: "SELECT clock_timestamp()"
+  constructs: ["SYSTIMESTAMP", "DUAL"]
+  tags: ["cybertec"]
+
+- name: rownum_in_order_by_subquery
+  category: syntax
+  oracle: >
+    SELECT name, sal, rn FROM (
+      SELECT name, sal, ROWNUM AS rn FROM employees ORDER BY sal DESC
+    ) WHERE rn <= 5
+  expected_postgresql: >
+    SELECT name, sal, rn FROM (
+      SELECT name, sal, ROW_NUMBER() OVER (ORDER BY sal DESC) AS rn FROM employees
+    ) AS subq WHERE rn <= 5
+  complexity: 5
+  constructs: ["ROWNUM", "ROW_NUMBER"]
+  tags: ["cybertec"]
+
+- name: minus_to_except_basic
+  category: syntax
+  oracle: "SELECT id FROM active_users MINUS SELECT id FROM banned_users"
+  expected_postgresql: "SELECT id FROM active_users EXCEPT SELECT id FROM banned_users"
+  constructs: ["MINUS"]
+  tags: ["cybertec"]
+
+- name: tablespace_removal
+  category: syntax
+  oracle: "CREATE TABLE orders (id NUMBER, total NUMBER(10,2)) TABLESPACE users"
+  expected_postgresql: "CREATE TABLE orders (id NUMERIC, total NUMERIC(10,2))"
+  complexity: 3
+  constructs: ["TABLESPACE", "NUMBER"]
+  tags: ["cybertec", "ddl"]

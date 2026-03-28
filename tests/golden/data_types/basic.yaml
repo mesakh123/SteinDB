@@ -1,0 +1,239 @@
+# =============================================================================
+# SteinDB Golden Tests — Data Type Conversions (Basic)
+# Complete coverage of all 23+ Oracle data types per CYBERTEC guide
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# STRING TYPES
+# ---------------------------------------------------------------------------
+
+- name: char_to_char
+  category: data_types
+  oracle: "CREATE TABLE t (code CHAR(10))"
+  expected_postgresql: "CREATE TABLE t (code CHAR(10))"
+  constructs: ["CHAR"]
+  tags: ["string"]
+
+- name: nchar_to_char
+  category: data_types
+  oracle: "CREATE TABLE t (code NCHAR(10))"
+  expected_postgresql: "CREATE TABLE t (code CHAR(10))"
+  constructs: ["NCHAR"]
+  tags: ["string", "unicode"]
+
+- name: varchar_to_varchar
+  category: data_types
+  oracle: "CREATE TABLE t (name VARCHAR(100))"
+  expected_postgresql: "CREATE TABLE t (name VARCHAR(100))"
+  constructs: ["VARCHAR"]
+  tags: ["string"]
+
+- name: varchar2_to_varchar
+  category: data_types
+  oracle: "CREATE TABLE t (name VARCHAR2(100))"
+  expected_postgresql: "CREATE TABLE t (name VARCHAR(100))"
+  constructs: ["VARCHAR2"]
+  tags: ["string"]
+
+- name: nvarchar2_to_varchar
+  category: data_types
+  oracle: "CREATE TABLE t (name NVARCHAR2(200))"
+  expected_postgresql: "CREATE TABLE t (name VARCHAR(200))"
+  constructs: ["NVARCHAR2"]
+  tags: ["string", "unicode"]
+
+- name: clob_to_text
+  category: data_types
+  oracle: "CREATE TABLE t (content CLOB)"
+  expected_postgresql: "CREATE TABLE t (content TEXT)"
+  constructs: ["CLOB"]
+  tags: ["string", "lob"]
+
+- name: long_to_text
+  category: data_types
+  oracle: "CREATE TABLE t (description LONG)"
+  expected_postgresql: "CREATE TABLE t (description TEXT)"
+  constructs: ["LONG"]
+  tags: ["string", "deprecated"]
+
+# ---------------------------------------------------------------------------
+# BINARY / LOB TYPES
+# ---------------------------------------------------------------------------
+
+- name: raw_to_bytea
+  category: data_types
+  oracle: "CREATE TABLE t (hash RAW(32))"
+  expected_postgresql: "CREATE TABLE t (hash BYTEA)"
+  constructs: ["RAW"]
+  tags: ["binary"]
+
+- name: raw_uuid_to_uuid
+  category: data_types
+  oracle: "CREATE TABLE t (guid RAW(16))"
+  expected_postgresql: "CREATE TABLE t (guid UUID)"
+  constructs: ["RAW"]
+  tags: ["binary", "uuid"]
+
+- name: blob_to_bytea
+  category: data_types
+  oracle: "CREATE TABLE t (photo BLOB)"
+  expected_postgresql: "CREATE TABLE t (photo BYTEA)"
+  constructs: ["BLOB"]
+  tags: ["binary", "lob"]
+
+- name: bfile_to_bytea
+  category: data_types
+  oracle: "CREATE TABLE t (attachment BFILE)"
+  expected_postgresql: "CREATE TABLE t (attachment BYTEA)"
+  constructs: ["BFILE"]
+  tags: ["binary", "lob", "read_only"]
+
+- name: long_raw_to_bytea
+  category: data_types
+  oracle: "CREATE TABLE t (image LONG RAW)"
+  expected_postgresql: "CREATE TABLE t (image BYTEA)"
+  constructs: ["LONG RAW"]
+  tags: ["binary", "deprecated"]
+
+# ---------------------------------------------------------------------------
+# NUMERIC TYPES
+# ---------------------------------------------------------------------------
+
+- name: number_no_precision_to_numeric
+  category: data_types
+  oracle: "CREATE TABLE t (val NUMBER)"
+  expected_postgresql: "CREATE TABLE t (val NUMERIC)"
+  constructs: ["NUMBER"]
+  tags: ["numeric"]
+
+- name: number_with_scale_to_numeric
+  category: data_types
+  oracle: "CREATE TABLE t (price NUMBER(10,2))"
+  expected_postgresql: "CREATE TABLE t (price NUMERIC(10,2))"
+  constructs: ["NUMBER"]
+  tags: ["numeric"]
+
+- name: number_smallint
+  category: data_types
+  oracle: "CREATE TABLE t (status NUMBER(4))"
+  expected_postgresql: "CREATE TABLE t (status SMALLINT)"
+  constructs: ["NUMBER"]
+  tags: ["numeric", "integer_optimization"]
+
+- name: number_integer
+  category: data_types
+  oracle: "CREATE TABLE t (id NUMBER(9))"
+  expected_postgresql: "CREATE TABLE t (id INTEGER)"
+  constructs: ["NUMBER"]
+  tags: ["numeric", "integer_optimization"]
+
+- name: number_bigint
+  category: data_types
+  oracle: "CREATE TABLE t (big_id NUMBER(18))"
+  expected_postgresql: "CREATE TABLE t (big_id BIGINT)"
+  constructs: ["NUMBER"]
+  tags: ["numeric", "integer_optimization"]
+
+- name: float_to_double_precision
+  category: data_types
+  oracle: "CREATE TABLE t (ratio FLOAT)"
+  expected_postgresql: "CREATE TABLE t (ratio DOUBLE PRECISION)"
+  constructs: ["FLOAT"]
+  tags: ["numeric"]
+
+- name: float_with_precision_to_real
+  category: data_types
+  oracle: "CREATE TABLE t (ratio FLOAT(24))"
+  expected_postgresql: "CREATE TABLE t (ratio REAL)"
+  constructs: ["FLOAT"]
+  tags: ["numeric"]
+
+- name: binary_float_to_real
+  category: data_types
+  oracle: "CREATE TABLE t (temperature BINARY_FLOAT)"
+  expected_postgresql: "CREATE TABLE t (temperature REAL)"
+  constructs: ["BINARY_FLOAT"]
+  tags: ["numeric"]
+
+- name: binary_double_to_double_precision
+  category: data_types
+  oracle: "CREATE TABLE t (distance BINARY_DOUBLE)"
+  expected_postgresql: "CREATE TABLE t (distance DOUBLE PRECISION)"
+  constructs: ["BINARY_DOUBLE"]
+  tags: ["numeric"]
+
+# ---------------------------------------------------------------------------
+# TEMPORAL TYPES
+# ---------------------------------------------------------------------------
+
+- name: date_to_timestamp
+  category: data_types
+  oracle: "CREATE TABLE t (created DATE)"
+  expected_postgresql: "CREATE TABLE t (created TIMESTAMP(0))"
+  constructs: ["DATE"]
+  tags: ["temporal"]
+  acceptance_criteria:
+    - "Oracle DATE includes time component (to the second, no fractional seconds); must map to TIMESTAMP(0) not DATE"
+
+- name: timestamp_to_timestamp
+  category: data_types
+  oracle: "CREATE TABLE t (created_at TIMESTAMP)"
+  expected_postgresql: "CREATE TABLE t (created_at TIMESTAMP)"
+  constructs: ["TIMESTAMP"]
+  tags: ["temporal"]
+
+- name: timestamp_with_precision
+  category: data_types
+  oracle: "CREATE TABLE t (event_time TIMESTAMP(6))"
+  expected_postgresql: "CREATE TABLE t (event_time TIMESTAMP(6))"
+  constructs: ["TIMESTAMP"]
+  tags: ["temporal"]
+
+- name: timestamp_tz_to_timestamptz
+  category: data_types
+  oracle: "CREATE TABLE t (event_time TIMESTAMP WITH TIME ZONE)"
+  expected_postgresql: "CREATE TABLE t (event_time TIMESTAMPTZ)"
+  constructs: ["TIMESTAMP WITH TIME ZONE"]
+  tags: ["temporal", "timezone"]
+
+- name: timestamp_local_tz_to_timestamptz
+  category: data_types
+  oracle: "CREATE TABLE t (login_time TIMESTAMP WITH LOCAL TIME ZONE)"
+  expected_postgresql: "CREATE TABLE t (login_time TIMESTAMPTZ)"
+  constructs: ["TIMESTAMP WITH LOCAL TIME ZONE"]
+  tags: ["temporal", "timezone"]
+
+- name: interval_year_to_month
+  category: data_types
+  oracle: "CREATE TABLE t (tenure INTERVAL YEAR TO MONTH)"
+  expected_postgresql: "CREATE TABLE t (tenure INTERVAL)"
+  constructs: ["INTERVAL YEAR TO MONTH"]
+  tags: ["temporal", "interval"]
+
+- name: interval_day_to_second
+  category: data_types
+  oracle: "CREATE TABLE t (duration INTERVAL DAY TO SECOND)"
+  expected_postgresql: "CREATE TABLE t (duration INTERVAL)"
+  constructs: ["INTERVAL DAY TO SECOND"]
+  tags: ["temporal", "interval"]
+
+# ---------------------------------------------------------------------------
+# XML AND SPATIAL TYPES
+# ---------------------------------------------------------------------------
+
+- name: xmltype_to_xml
+  category: data_types
+  oracle: "CREATE TABLE t (config XMLTYPE)"
+  expected_postgresql: "CREATE TABLE t (config XML)"
+  constructs: ["XMLTYPE"]
+  tags: ["xml"]
+
+- name: sdo_geometry_to_geometry
+  category: data_types
+  oracle: "CREATE TABLE t (location MDSYS.SDO_GEOMETRY)"
+  expected_postgresql: "CREATE TABLE t (location GEOMETRY)"
+  constructs: ["MDSYS.SDO_GEOMETRY"]
+  tags: ["spatial", "postgis"]
+  complexity: 3
+  acceptance_criteria:
+    - "Requires PostGIS extension"

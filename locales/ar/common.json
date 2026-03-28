@@ -1,0 +1,58 @@
+{
+  "app_name": "SteinDB",
+  "tagline": "أداة الترحيل ثنائية الاتجاه الوحيدة بين Oracle و PostgreSQL",
+  "directions": {
+    "o2p": "من Oracle إلى PostgreSQL",
+    "p2o": "من PostgreSQL إلى Oracle"
+  },
+  "tiers": {
+    "free": "مجاني",
+    "registered": "مسجّل",
+    "solo": "فردي",
+    "team": "فريق",
+    "enterprise": "مؤسسي"
+  },
+  "roles": {
+    "owner": "المالك",
+    "admin": "المسؤول",
+    "member": "عضو",
+    "viewer": "مشاهد"
+  },
+  "actions": {
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "delete": "حذف",
+    "edit": "تعديل",
+    "create": "إنشاء",
+    "search": "بحث",
+    "filter": "تصفية",
+    "export": "تصدير",
+    "download": "تنزيل",
+    "copy": "نسخ",
+    "copied": "تم النسخ!",
+    "loading": "جارٍ التحميل...",
+    "submit": "إرسال",
+    "confirm": "تأكيد",
+    "back": "رجوع",
+    "next": "التالي",
+    "upgrade": "ترقية",
+    "register": "تسجيل",
+    "login": "تسجيل الدخول",
+    "logout": "تسجيل الخروج"
+  },
+  "status": {
+    "active": "نشط",
+    "inactive": "غير نشط",
+    "success": "ناجح",
+    "failed": "فشل",
+    "partial": "جزئي",
+    "pending": "قيد الانتظار"
+  },
+  "time": {
+    "just_now": "الآن",
+    "minutes_ago": "منذ {n} دقائق",
+    "hours_ago": "منذ {n} ساعات",
+    "days_ago": "منذ {n} أيام",
+    "yesterday": "أمس"
+  }
+}

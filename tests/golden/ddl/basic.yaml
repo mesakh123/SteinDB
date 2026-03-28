@@ -1,0 +1,43 @@
+- name: create_table_basic
+  category: ddl
+  oracle: "CREATE TABLE hr.employees (id NUMBER(10) NOT NULL, name VARCHAR2(100), CONSTRAINT pk_emp PRIMARY KEY (id))"
+  expected_postgresql: "CREATE TABLE hr.employees (id INTEGER NOT NULL, name VARCHAR(100), CONSTRAINT pk_emp PRIMARY KEY (id))"
+  constructs: ["CREATE TABLE"]
+
+- name: create_index
+  category: ddl
+  oracle: "CREATE INDEX idx_emp_name ON hr.employees (name)"
+  expected_postgresql: "CREATE INDEX idx_emp_name ON hr.employees (name)"
+  constructs: ["CREATE INDEX"]
+  tags: ["no_change"]
+
+- name: add_column
+  category: ddl
+  oracle: "ALTER TABLE employees ADD (email VARCHAR2(255))"
+  expected_postgresql: "ALTER TABLE employees ADD COLUMN email VARCHAR(255)"
+  constructs: ["ALTER TABLE"]
+
+- name: modify_column
+  category: ddl
+  oracle: "ALTER TABLE employees MODIFY (name VARCHAR2(200))"
+  expected_postgresql: "ALTER TABLE employees ALTER COLUMN name TYPE VARCHAR(200)"
+  constructs: ["ALTER TABLE", "MODIFY"]
+
+- name: drop_column
+  category: ddl
+  oracle: "ALTER TABLE employees DROP COLUMN middle_name"
+  expected_postgresql: "ALTER TABLE employees DROP COLUMN middle_name"
+  constructs: ["ALTER TABLE"]
+  tags: ["no_change"]
+
+- name: create_table_with_default
+  category: ddl
+  oracle: "CREATE TABLE t (status NUMBER(1) DEFAULT 1, created DATE DEFAULT SYSDATE)"
+  expected_postgresql: "CREATE TABLE t (status SMALLINT DEFAULT 1, created TIMESTAMP(0) DEFAULT CURRENT_TIMESTAMP)"
+  constructs: ["DEFAULT", "SYSDATE"]
+
+- name: not_null_constraint
+  category: ddl
+  oracle: "ALTER TABLE employees MODIFY (email VARCHAR2(255) NOT NULL)"
+  expected_postgresql: "ALTER TABLE employees ALTER COLUMN email SET NOT NULL"
+  constructs: ["ALTER TABLE", "NOT NULL"]

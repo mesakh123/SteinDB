@@ -1,0 +1,132 @@
+- name: package_constant
+  category: packages
+  oracle: |
+    CREATE OR REPLACE PACKAGE hr_constants IS
+      c_max_salary CONSTANT NUMBER := 999999;
+      c_min_salary CONSTANT NUMBER := 10000;
+    END hr_constants;
+  expected_postgresql: |
+    CREATE SCHEMA IF NOT EXISTS hr_constants;
+    CREATE OR REPLACE FUNCTION hr_constants.c_max_salary() RETURNS NUMERIC
+    LANGUAGE sql IMMUTABLE AS $$ SELECT 999999::NUMERIC $$;
+    CREATE OR REPLACE FUNCTION hr_constants.c_min_salary() RETURNS NUMERIC
+    LANGUAGE sql IMMUTABLE AS $$ SELECT 10000::NUMERIC $$;
+  complexity: 3
+  constructs: ["PACKAGE", "CONSTANT"]
+
+- name: package_function
+  category: packages
+  oracle: |
+    CREATE OR REPLACE PACKAGE BODY hr_utils IS
+      FUNCTION full_name(p_first VARCHAR2, p_last VARCHAR2) RETURN VARCHAR2 IS
+      BEGIN
+        RETURN p_first || ' ' || p_last;
+      END;
+    END hr_utils;
+  expected_postgresql: |
+    CREATE SCHEMA IF NOT EXISTS hr_utils;
+    CREATE OR REPLACE FUNCTION hr_utils.full_name(p_first VARCHAR, p_last VARCHAR) RETURNS VARCHAR
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      RETURN p_first || ' ' || p_last;
+    END;
+    $$;
+  complexity: 4
+  constructs: ["PACKAGE BODY", "FUNCTION"]
+
+- name: package_procedure
+  category: packages
+  oracle: |
+    CREATE OR REPLACE PACKAGE BODY emp_mgmt IS
+      PROCEDURE raise_salary(p_emp_id NUMBER, p_amount NUMBER) IS
+      BEGIN
+        UPDATE employees SET salary = salary + p_amount WHERE id = p_emp_id;
+      END;
+    END emp_mgmt;
+  expected_postgresql: |
+    CREATE SCHEMA IF NOT EXISTS emp_mgmt;
+    CREATE OR REPLACE PROCEDURE emp_mgmt.raise_salary(p_emp_id INTEGER, p_amount NUMERIC)
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      UPDATE employees SET salary = salary + p_amount WHERE id = p_emp_id;
+    END;
+    $$;
+  complexity: 4
+  constructs: ["PACKAGE BODY", "PROCEDURE"]
+
+- name: package_type
+  category: packages
+  oracle: |
+    CREATE OR REPLACE PACKAGE hr_types IS
+      TYPE emp_rec IS RECORD (
+        id NUMBER,
+        name VARCHAR2(100),
+        salary NUMBER(10,2)
+      );
+    END hr_types;
+  expected_postgresql: |
+    CREATE SCHEMA IF NOT EXISTS hr_types;
+    CREATE TYPE hr_types.emp_rec AS (
+      id INTEGER,
+      name VARCHAR(100),
+      salary NUMERIC(10,2)
+    );
+  complexity: 5
+  constructs: ["PACKAGE", "TYPE", "RECORD"]
+
+- name: package_cursor
+  category: packages
+  oracle: |
+    CREATE OR REPLACE PACKAGE BODY emp_reports IS
+      PROCEDURE get_active_employees IS
+        CURSOR c_active IS
+          SELECT id, name FROM employees WHERE status = 'ACTIVE';
+      BEGIN
+        FOR rec IN c_active LOOP
+          DBMS_OUTPUT.PUT_LINE(rec.name);
+        END LOOP;
+      END;
+    END emp_reports;
+  expected_postgresql: |
+    CREATE SCHEMA IF NOT EXISTS emp_reports;
+    CREATE OR REPLACE PROCEDURE emp_reports.get_active_employees()
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      rec RECORD;
+    BEGIN
+      FOR rec IN SELECT id, name FROM employees WHERE status = 'ACTIVE' LOOP
+        RAISE NOTICE '%', rec.name;
+      END LOOP;
+    END;
+    $$;
+  complexity: 5
+  constructs: ["PACKAGE BODY", "CURSOR", "DBMS_OUTPUT"]
+
+- name: package_init
+  category: packages
+  oracle: |
+    CREATE OR REPLACE PACKAGE BODY app_config IS
+      g_app_name VARCHAR2(50);
+    BEGIN
+      g_app_name := 'SteinDB';
+    END app_config;
+  expected_postgresql: |
+    CREATE SCHEMA IF NOT EXISTS app_config;
+    CREATE OR REPLACE FUNCTION app_config.g_app_name() RETURNS VARCHAR
+    LANGUAGE sql IMMUTABLE AS $$ SELECT 'SteinDB'::VARCHAR $$;
+  complexity: 3
+  constructs: ["PACKAGE BODY", "INIT SECTION"]
+
+- name: package_to_schema
+  category: packages
+  oracle: |
+    CREATE OR REPLACE PACKAGE util_pkg IS
+      FUNCTION get_version RETURN VARCHAR2;
+      PROCEDURE log_message(p_msg VARCHAR2);
+    END util_pkg;
+  expected_postgresql: |
+    CREATE SCHEMA IF NOT EXISTS util_pkg;
+    COMMENT ON SCHEMA util_pkg IS 'Converted from Oracle package util_pkg';
+  complexity: 2
+  constructs: ["PACKAGE", "SPEC"]
+  tags: ["spec_only"]

@@ -1,0 +1,53 @@
+{
+  "commands": {
+    "scan": {
+      "help": "Oracle/PostgreSQL स्कीमा स्कैन करें और माइग्रेशन तैयारी रिपोर्ट बनाएं",
+      "scanning": "{file} स्कैन हो रहा है...",
+      "found_objects": "{count} ऑब्जेक्ट मिले",
+      "complexity": "जटिलता: {score}/10",
+      "complete": "स्कैन {seconds}s में पूरा हुआ"
+    },
+    "convert": {
+      "help": "Oracle SQL/PL-SQL को PostgreSQL में बदलें (या उल्टा)",
+      "converting": "{count} ऑब्जेक्ट रूपांतरित हो रहे हैं...",
+      "rules_only": "केवल नियम मोड (90% कवरेज)",
+      "ai_required": "AI-सहायित रूपांतरण के लिए पंजीकरण (निःशुल्क) आवश्यक है।\nपंजीकरण: stein auth register --email you@company.com\nया केवल नियम मोड का उपयोग करें: stein convert myfile.sql",
+      "complete": "{converted}/{total} ऑब्जेक्ट रूपांतरित",
+      "forwarded": "{count} ऑब्जेक्ट AI को भेजे गए"
+    },
+    "verify": {
+      "help": "रूपांतरित PostgreSQL/Oracle आउटपुट की शुद्धता सत्यापित करें",
+      "verifying": "{count} फ़ाइलें सत्यापित हो रही हैं...",
+      "green": "हरा — उच्च विश्वसनीयता",
+      "yellow": "पीला — समीक्षा अनुशंसित",
+      "red": "लाल — मैन्युअल सुधार आवश्यक"
+    },
+    "auth": {
+      "register_help": "निःशुल्क SteinDB खाता पंजीकृत करें",
+      "register_success": "पंजीकरण सफल!",
+      "register_prompt": "ईमेल पता",
+      "login_help": "मौजूदा टोकन से लॉगिन करें",
+      "logout_help": "संग्रहीत टोकन हटाएं",
+      "logout_success": "लॉगआउट हो गया। टोकन के बिना भी केवल-नियम मोड काम करता है।",
+      "status_help": "वर्तमान प्रमाणीकरण स्थिति दिखाएं",
+      "status_authenticated": "प्रमाणित",
+      "status_not_authenticated": "अप्रमाणित",
+      "upgrade_help": "अपना खाता सशुल्क प्लान में अपग्रेड करें"
+    }
+  },
+  "errors": {
+    "file_not_found": "फ़ाइल नहीं मिली: {path}",
+    "invalid_sql": "अमान्य SQL इनपुट",
+    "connection_failed": "कनेक्शन विफल: {error}",
+    "no_objects": "इनपुट में कोई ऑब्जेक्ट नहीं मिला"
+  },
+  "report": {
+    "title": "SteinDB माइग्रेशन रिपोर्ट",
+    "summary": "सारांश",
+    "total_objects": "कुल ऑब्जेक्ट",
+    "auto_convertible": "स्वतः रूपांतरणीय",
+    "needs_ai": "AI सहायता आवश्यक",
+    "complexity_avg": "औसत जटिलता",
+    "savings_estimate": "अनुमानित बचत"
+  }
+}

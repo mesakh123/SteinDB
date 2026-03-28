@@ -1,0 +1,138 @@
+- name: before_insert_trigger
+  category: triggers
+  oracle: |
+    CREATE OR REPLACE TRIGGER trg_emp_bi
+    BEFORE INSERT ON employees
+    FOR EACH ROW
+    BEGIN
+      :NEW.created_at := SYSDATE;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION trg_emp_bi_func() RETURNS TRIGGER AS $$
+    BEGIN
+      NEW.created_at := CURRENT_TIMESTAMP;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_emp_bi BEFORE INSERT ON employees FOR EACH ROW EXECUTE FUNCTION trg_emp_bi_func();
+  complexity: 3
+  constructs: ["TRIGGER", "BEFORE INSERT", ":NEW", "SYSDATE"]
+
+- name: after_update_trigger
+  category: triggers
+  oracle: |
+    CREATE OR REPLACE TRIGGER trg_audit
+    AFTER UPDATE ON employees
+    FOR EACH ROW
+    BEGIN
+      INSERT INTO audit_log (table_name, action, old_val, new_val)
+      VALUES ('employees', 'UPDATE', :OLD.name, :NEW.name);
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION trg_audit_func() RETURNS TRIGGER AS $$
+    BEGIN
+      INSERT INTO audit_log (table_name, action, old_val, new_val)
+      VALUES ('employees', 'UPDATE', OLD.name, NEW.name);
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_audit AFTER UPDATE ON employees FOR EACH ROW EXECUTE FUNCTION trg_audit_func();
+  complexity: 4
+  constructs: ["TRIGGER", "AFTER UPDATE", ":OLD", ":NEW"]
+
+- name: before_delete_trigger
+  category: triggers
+  oracle: |
+    CREATE OR REPLACE TRIGGER trg_no_delete
+    BEFORE DELETE ON employees
+    FOR EACH ROW
+    BEGIN
+      RAISE_APPLICATION_ERROR(-20001, 'Cannot delete employees');
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION trg_no_delete_func() RETURNS TRIGGER AS $$
+    BEGIN
+      RAISE EXCEPTION 'Cannot delete employees';
+      RETURN OLD;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_no_delete BEFORE DELETE ON employees FOR EACH ROW EXECUTE FUNCTION trg_no_delete_func();
+  complexity: 3
+  constructs: ["TRIGGER", "RAISE_APPLICATION_ERROR"]
+
+- name: statement_level_trigger
+  category: triggers
+  oracle: |
+    CREATE OR REPLACE TRIGGER trg_log_changes
+    AFTER INSERT OR UPDATE OR DELETE ON employees
+    BEGIN
+      INSERT INTO change_log (table_name, changed_at) VALUES ('employees', SYSDATE);
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION trg_log_changes_func() RETURNS TRIGGER AS $$
+    BEGIN
+      INSERT INTO change_log (table_name, changed_at) VALUES ('employees', CURRENT_TIMESTAMP);
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_log_changes AFTER INSERT OR UPDATE OR DELETE ON employees FOR EACH STATEMENT EXECUTE FUNCTION trg_log_changes_func();
+  complexity: 3
+  constructs: ["TRIGGER", "STATEMENT LEVEL", "SYSDATE"]
+
+- name: trigger_with_condition
+  category: triggers
+  oracle: |
+    CREATE OR REPLACE TRIGGER trg_salary_check
+    BEFORE UPDATE OF salary ON employees
+    FOR EACH ROW
+    WHEN (NEW.salary > OLD.salary * 2)
+    BEGIN
+      RAISE_APPLICATION_ERROR(-20002, 'Salary increase too large');
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION trg_salary_check_func() RETURNS TRIGGER AS $$
+    BEGIN
+      IF NEW.salary > OLD.salary * 2 THEN
+        RAISE EXCEPTION 'Salary increase too large';
+      END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_salary_check BEFORE UPDATE OF salary ON employees FOR EACH ROW EXECUTE FUNCTION trg_salary_check_func();
+  complexity: 5
+  constructs: ["TRIGGER", "WHEN", "RAISE_APPLICATION_ERROR"]
+
+- name: instead_of_trigger
+  category: triggers
+  oracle: |
+    CREATE OR REPLACE TRIGGER trg_emp_view
+    INSTEAD OF INSERT ON emp_view
+    FOR EACH ROW
+    BEGIN
+      INSERT INTO employees (id, name) VALUES (:NEW.id, :NEW.name);
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION trg_emp_view_func() RETURNS TRIGGER AS $$
+    BEGIN
+      INSERT INTO employees (id, name) VALUES (NEW.id, NEW.name);
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_emp_view INSTEAD OF INSERT ON emp_view FOR EACH ROW EXECUTE FUNCTION trg_emp_view_func();
+  complexity: 3
+  constructs: ["TRIGGER", "INSTEAD OF", ":NEW"]
+
+- name: sequence_trigger
+  category: triggers
+  oracle: |
+    CREATE OR REPLACE TRIGGER trg_emp_id
+    BEFORE INSERT ON employees
+    FOR EACH ROW
+    BEGIN
+      SELECT emp_seq.NEXTVAL INTO :NEW.id FROM DUAL;
+    END;
+  expected_postgresql: |
+    ALTER TABLE employees ALTER COLUMN id SET DEFAULT nextval('emp_seq');
+  complexity: 2
+  constructs: ["TRIGGER", "SEQUENCE", ":NEW", "NEXTVAL"]
+  tags: ["identity_pattern"]

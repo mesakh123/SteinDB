@@ -1,0 +1,53 @@
+{
+  "commands": {
+    "scan": {
+      "help": "Scanner le schéma Oracle/PostgreSQL et générer un rapport de préparation à la migration",
+      "scanning": "Analyse de {file} en cours...",
+      "found_objects": "{count} objets trouvés",
+      "complexity": "Complexité : {score}/10",
+      "complete": "Analyse terminée en {seconds}s"
+    },
+    "convert": {
+      "help": "Convertir Oracle SQL/PL-SQL vers PostgreSQL (ou l'inverse)",
+      "converting": "Conversion de {count} objets en cours...",
+      "rules_only": "Mode règles uniquement (couverture de 90%)",
+      "ai_required": "La conversion assistée par IA nécessite une inscription (gratuite).\nInscription : stein auth register --email you@company.com\nOu utilisez le mode règles uniquement : stein convert myfile.sql",
+      "complete": "{converted}/{total} objets convertis",
+      "forwarded": "{count} objets transmis à l'IA"
+    },
+    "verify": {
+      "help": "Vérifier la sortie PostgreSQL/Oracle convertie pour la conformité",
+      "verifying": "Vérification de {count} fichiers en cours...",
+      "green": "VERT — confiance élevée",
+      "yellow": "JAUNE — révision recommandée",
+      "red": "ROUGE — correction manuelle nécessaire"
+    },
+    "auth": {
+      "register_help": "Créer un compte SteinDB gratuit",
+      "register_success": "Inscription réussie !",
+      "register_prompt": "Adresse e-mail",
+      "login_help": "Se connecter avec un jeton existant",
+      "logout_help": "Supprimer le jeton enregistré",
+      "logout_success": "Déconnecté. Le mode règles uniquement fonctionne toujours sans jeton.",
+      "status_help": "Afficher l'état d'authentification actuel",
+      "status_authenticated": "Authentifié",
+      "status_not_authenticated": "Non authentifié",
+      "upgrade_help": "Mettre à niveau votre compte vers un forfait payant"
+    }
+  },
+  "errors": {
+    "file_not_found": "Fichier introuvable : {path}",
+    "invalid_sql": "Entrée SQL invalide",
+    "connection_failed": "Échec de connexion : {error}",
+    "no_objects": "Aucun objet trouvé dans l'entrée"
+  },
+  "report": {
+    "title": "Rapport de migration SteinDB",
+    "summary": "Résumé",
+    "total_objects": "Total des objets",
+    "auto_convertible": "Convertible automatiquement",
+    "needs_ai": "Nécessite une assistance IA",
+    "complexity_avg": "Complexité moyenne",
+    "savings_estimate": "Économies estimées"
+  }
+}

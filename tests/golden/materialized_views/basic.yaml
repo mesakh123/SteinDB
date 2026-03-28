@@ -1,0 +1,87 @@
+- name: basic_mview
+  category: materialized_views
+  oracle: |
+    CREATE MATERIALIZED VIEW mv_emp_summary AS
+    SELECT department_id, COUNT(*) AS emp_count, AVG(salary) AS avg_salary
+    FROM employees
+    GROUP BY department_id;
+  expected_postgresql: |
+    CREATE MATERIALIZED VIEW mv_emp_summary AS
+    SELECT department_id, COUNT(*) AS emp_count, AVG(salary) AS avg_salary
+    FROM employees
+    GROUP BY department_id;
+  constructs: ["MATERIALIZED VIEW"]
+  tags: ["no_change"]
+
+- name: mview_refresh_complete
+  category: materialized_views
+  oracle: |
+    CREATE MATERIALIZED VIEW mv_orders
+    BUILD IMMEDIATE
+    REFRESH COMPLETE ON DEMAND
+    AS SELECT * FROM orders WHERE status = 'ACTIVE';
+  expected_postgresql: |
+    CREATE MATERIALIZED VIEW mv_orders AS
+    SELECT * FROM orders WHERE status = 'ACTIVE';
+  constructs: ["MATERIALIZED VIEW", "REFRESH COMPLETE", "BUILD IMMEDIATE"]
+
+- name: mview_refresh_fast
+  category: materialized_views
+  oracle: |
+    CREATE MATERIALIZED VIEW mv_sales
+    REFRESH FAST ON COMMIT
+    AS SELECT product_id, SUM(amount) AS total
+    FROM sales
+    GROUP BY product_id;
+  expected_postgresql: |
+    CREATE MATERIALIZED VIEW mv_sales AS
+    SELECT product_id, SUM(amount) AS total
+    FROM sales
+    GROUP BY product_id;
+    -- NOTE: PostgreSQL does not support FAST REFRESH or ON COMMIT refresh.
+    -- Use REFRESH MATERIALIZED VIEW CONCURRENTLY with a unique index and pg_cron.
+  complexity: 5
+  constructs: ["MATERIALIZED VIEW", "REFRESH FAST", "ON COMMIT"]
+  tags: ["manual_review"]
+
+- name: mview_with_index
+  category: materialized_views
+  oracle: |
+    CREATE MATERIALIZED VIEW mv_products AS
+    SELECT id, name, price FROM products;
+    CREATE INDEX idx_mv_products ON mv_products (id);
+  expected_postgresql: |
+    CREATE MATERIALIZED VIEW mv_products AS
+    SELECT id, name, price FROM products;
+    CREATE UNIQUE INDEX idx_mv_products ON mv_products (id);
+  constructs: ["MATERIALIZED VIEW", "INDEX"]
+
+- name: mview_drop
+  category: materialized_views
+  oracle: "DROP MATERIALIZED VIEW mv_emp_summary"
+  expected_postgresql: "DROP MATERIALIZED VIEW IF EXISTS mv_emp_summary"
+  constructs: ["DROP MATERIALIZED VIEW"]
+
+- name: mview_no_refresh
+  category: materialized_views
+  oracle: |
+    CREATE MATERIALIZED VIEW mv_static
+    NEVER REFRESH
+    AS SELECT * FROM reference_data;
+  expected_postgresql: |
+    CREATE MATERIALIZED VIEW mv_static AS
+    SELECT * FROM reference_data;
+  constructs: ["MATERIALIZED VIEW", "NEVER REFRESH"]
+
+- name: mview_build_deferred
+  category: materialized_views
+  oracle: |
+    CREATE MATERIALIZED VIEW mv_deferred
+    BUILD DEFERRED
+    REFRESH COMPLETE ON DEMAND
+    AS SELECT * FROM large_table;
+  expected_postgresql: |
+    CREATE MATERIALIZED VIEW mv_deferred AS
+    SELECT * FROM large_table
+    WITH NO DATA;
+  constructs: ["MATERIALIZED VIEW", "BUILD DEFERRED"]

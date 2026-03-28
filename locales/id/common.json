@@ -1,0 +1,58 @@
+{
+  "app_name": "SteinDB",
+  "tagline": "Satu-satunya alat migrasi dua arah Oracle ↔ PostgreSQL",
+  "directions": {
+    "o2p": "Oracle ke PostgreSQL",
+    "p2o": "PostgreSQL ke Oracle"
+  },
+  "tiers": {
+    "free": "Gratis",
+    "registered": "Terdaftar",
+    "solo": "Solo",
+    "team": "Tim",
+    "enterprise": "Enterprise"
+  },
+  "roles": {
+    "owner": "Pemilik",
+    "admin": "Administrator",
+    "member": "Anggota",
+    "viewer": "Peninjau"
+  },
+  "actions": {
+    "save": "Simpan",
+    "cancel": "Batal",
+    "delete": "Hapus",
+    "edit": "Edit",
+    "create": "Buat",
+    "search": "Cari",
+    "filter": "Filter",
+    "export": "Ekspor",
+    "download": "Unduh",
+    "copy": "Salin",
+    "copied": "Tersalin!",
+    "loading": "Memuat...",
+    "submit": "Kirim",
+    "confirm": "Konfirmasi",
+    "back": "Kembali",
+    "next": "Selanjutnya",
+    "upgrade": "Tingkatkan",
+    "register": "Daftar",
+    "login": "Masuk",
+    "logout": "Keluar"
+  },
+  "status": {
+    "active": "Aktif",
+    "inactive": "Tidak Aktif",
+    "success": "Berhasil",
+    "failed": "Gagal",
+    "partial": "Sebagian",
+    "pending": "Menunggu"
+  },
+  "time": {
+    "just_now": "baru saja",
+    "minutes_ago": "{n} menit yang lalu",
+    "hours_ago": "{n} jam yang lalu",
+    "days_ago": "{n} hari yang lalu",
+    "yesterday": "kemarin"
+  }
+}

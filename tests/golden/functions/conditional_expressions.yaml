@@ -1,0 +1,193 @@
+# =============================================================================
+# SteinDB Golden Tests — Conditional Expressions & Misc Functions (O2P)
+# Additional function patterns from reviewer feedback
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# LNNVL — Oracle-specific NULL-aware predicate
+# ---------------------------------------------------------------------------
+
+- name: lnnvl
+  category: functions
+  oracle: "SELECT * FROM employees WHERE LNNVL(commission_pct > 0.1)"
+  expected_postgresql: "SELECT * FROM employees WHERE NOT (commission_pct > 0.1) OR commission_pct IS NULL"
+  complexity: 4
+  constructs: ["LNNVL"]
+  tags: ["null_handling", "reviewer_gap"]
+  acceptance_criteria:
+    - "LNNVL returns TRUE when condition is FALSE or NULL"
+    - "PG equivalent: NOT(condition) OR col IS NULL"
+
+# ---------------------------------------------------------------------------
+# NANVL — NaN handling
+# ---------------------------------------------------------------------------
+
+- name: nanvl
+  category: functions
+  oracle: "SELECT NANVL(value, 0) FROM measurements"
+  expected_postgresql: "SELECT CASE WHEN value = 'NaN'::NUMERIC THEN 0 ELSE value END FROM measurements"
+  complexity: 3
+  constructs: ["NANVL"]
+  tags: ["null_handling", "reviewer_gap"]
+  acceptance_criteria:
+    - "NANVL replaces NaN with alternative; PG uses CASE on NaN check"
+
+# ---------------------------------------------------------------------------
+# NULLIF — compatible
+# ---------------------------------------------------------------------------
+
+- name: nullif_compatible
+  category: functions
+  oracle: "SELECT NULLIF(status, 'UNKNOWN') FROM orders"
+  expected_postgresql: "SELECT NULLIF(status, 'UNKNOWN') FROM orders"
+  complexity: 1
+  constructs: ["NULLIF"]
+  tags: ["no_change", "reviewer_gap"]
+  acceptance_criteria:
+    - "NULLIF works identically in Oracle and PG"
+
+# ---------------------------------------------------------------------------
+# GREATEST / LEAST with NULLs
+# ---------------------------------------------------------------------------
+
+- name: greatest_null_behavior
+  category: functions
+  oracle: "SELECT GREATEST(10, NULL, 20) FROM DUAL"
+  expected_postgresql: "SELECT GREATEST(10, NULL, 20)"
+  complexity: 4
+  constructs: ["GREATEST", "DUAL"]
+  tags: ["null_semantics", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle GREATEST returns NULL if any arg is NULL"
+    - "PG GREATEST ignores NULLs — behavioral difference!"
+    - "May need wrapper function for Oracle-compatible NULL behavior"
+
+- name: least_null_behavior
+  category: functions
+  oracle: "SELECT LEAST(10, NULL, 20) FROM DUAL"
+  expected_postgresql: "SELECT LEAST(10, NULL, 20)"
+  complexity: 4
+  constructs: ["LEAST", "DUAL"]
+  tags: ["null_semantics", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle LEAST returns NULL if any arg is NULL"
+    - "PG LEAST ignores NULLs — behavioral difference!"
+
+# ---------------------------------------------------------------------------
+# REMAINDER vs MOD
+# ---------------------------------------------------------------------------
+
+- name: remainder_function
+  category: functions
+  oracle: "SELECT REMAINDER(15, 4) FROM DUAL"
+  expected_postgresql: "SELECT 15 - 4 * ROUND(15.0 / 4)"
+  complexity: 3
+  constructs: ["REMAINDER", "DUAL"]
+  tags: ["numeric", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle REMAINDER uses nearest-integer division, not floor"
+    - "PG MOD uses floor division — different results for negative numbers"
+
+# ---------------------------------------------------------------------------
+# BITAND
+# ---------------------------------------------------------------------------
+
+- name: bitand_to_ampersand
+  category: functions
+  oracle: "SELECT BITAND(flag, 4) FROM permissions"
+  expected_postgresql: "SELECT flag & 4 FROM permissions"
+  complexity: 2
+  constructs: ["BITAND"]
+  tags: ["bitwise", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle BITAND(a, b) maps to PG a & b operator"
+
+# ---------------------------------------------------------------------------
+# POWER / EXP / LN — compatible
+# ---------------------------------------------------------------------------
+
+- name: math_functions_compatible
+  category: functions
+  oracle: "SELECT POWER(2, 10), EXP(1), LN(100) FROM DUAL"
+  expected_postgresql: "SELECT POWER(2, 10), EXP(1), LN(100)"
+  complexity: 1
+  constructs: ["POWER", "EXP", "LN", "DUAL"]
+  tags: ["numeric", "no_change", "reviewer_gap"]
+  acceptance_criteria:
+    - "POWER, EXP, LN work identically in Oracle and PG"
+
+# ---------------------------------------------------------------------------
+# SOUNDEX — compatible
+# ---------------------------------------------------------------------------
+
+- name: soundex_compatible
+  category: functions
+  oracle: "SELECT * FROM employees WHERE SOUNDEX(last_name) = SOUNDEX('Smith')"
+  expected_postgresql: "SELECT * FROM employees WHERE SOUNDEX(last_name) = SOUNDEX('Smith')"
+  complexity: 1
+  constructs: ["SOUNDEX"]
+  tags: ["string", "no_change", "reviewer_gap"]
+  acceptance_criteria:
+    - "SOUNDEX works identically in Oracle and PG"
+
+# ---------------------------------------------------------------------------
+# ASCII / CHR — compatible
+# ---------------------------------------------------------------------------
+
+- name: ascii_chr_compatible
+  category: functions
+  oracle: "SELECT ASCII('A'), CHR(65) FROM DUAL"
+  expected_postgresql: "SELECT ASCII('A'), CHR(65)"
+  complexity: 1
+  constructs: ["ASCII", "CHR", "DUAL"]
+  tags: ["string", "no_change", "reviewer_gap"]
+  acceptance_criteria:
+    - "ASCII and CHR work identically in Oracle and PG"
+
+# ---------------------------------------------------------------------------
+# RAWTOHEX / HEXTORAW
+# ---------------------------------------------------------------------------
+
+- name: rawtohex
+  category: functions
+  oracle: "SELECT RAWTOHEX(raw_col) FROM raw_data"
+  expected_postgresql: "SELECT ENCODE(raw_col, 'hex') FROM raw_data"
+  complexity: 3
+  constructs: ["RAWTOHEX"]
+  tags: ["raw", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle RAWTOHEX maps to PG ENCODE(col, 'hex')"
+
+- name: hextoraw
+  category: functions
+  oracle: "SELECT HEXTORAW('DEADBEEF') FROM DUAL"
+  expected_postgresql: "SELECT DECODE('DEADBEEF', 'hex')"
+  complexity: 3
+  constructs: ["HEXTORAW", "DUAL"]
+  tags: ["raw", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle HEXTORAW maps to PG DECODE(str, 'hex')"
+
+# ---------------------------------------------------------------------------
+# SYS_CONTEXT
+# ---------------------------------------------------------------------------
+
+- name: sys_context_userenv
+  category: functions
+  oracle: "SELECT SYS_CONTEXT('USERENV', 'SESSION_USER') FROM DUAL"
+  expected_postgresql: "SELECT SESSION_USER"
+  complexity: 3
+  constructs: ["SYS_CONTEXT", "DUAL"]
+  tags: ["session", "reviewer_gap"]
+  acceptance_criteria:
+    - "SYS_CONTEXT('USERENV', 'SESSION_USER') maps to PG SESSION_USER"
+
+- name: sys_context_current_schema
+  category: functions
+  oracle: "SELECT SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') FROM DUAL"
+  expected_postgresql: "SELECT current_schema()"
+  complexity: 3
+  constructs: ["SYS_CONTEXT", "DUAL"]
+  tags: ["session", "reviewer_gap"]
+  acceptance_criteria:
+    - "SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') maps to current_schema()"

@@ -1,0 +1,53 @@
+{
+  "commands": {
+    "scan": {
+      "help": "สแกนสคีมา Oracle/PostgreSQL และสร้างรายงานความพร้อมในการย้ายข้อมูล",
+      "scanning": "กำลังสแกน {file}...",
+      "found_objects": "พบ {count} อ็อบเจกต์",
+      "complexity": "ความซับซ้อน: {score}/10",
+      "complete": "สแกนเสร็จสิ้นใน {seconds} วินาที"
+    },
+    "convert": {
+      "help": "แปลง Oracle SQL/PL-SQL เป็น PostgreSQL (หรือย้อนกลับ)",
+      "converting": "กำลังแปลง {count} อ็อบเจกต์...",
+      "rules_only": "ใช้โหมดกฎเท่านั้น (ครอบคลุม 90%)",
+      "ai_required": "การแปลงโดย AI ต้องลงทะเบียน (ฟรี)\nลงทะเบียน: stein auth register --email you@company.com\nหรือใช้โหมดกฎเท่านั้น: stein convert myfile.sql",
+      "complete": "แปลงแล้ว {converted}/{total} อ็อบเจกต์",
+      "forwarded": "{count} อ็อบเจกต์ส่งต่อไปยัง AI"
+    },
+    "verify": {
+      "help": "ตรวจสอบความถูกต้องของผลลัพธ์ PostgreSQL/Oracle ที่แปลงแล้ว",
+      "verifying": "กำลังตรวจสอบ {count} ไฟล์...",
+      "green": "เขียว — ความเชื่อมั่นสูง",
+      "yellow": "เหลือง — แนะนำให้ตรวจสอบ",
+      "red": "แดง — ต้องแก้ไขด้วยตนเอง"
+    },
+    "auth": {
+      "register_help": "ลงทะเบียนบัญชี SteinDB ฟรี",
+      "register_success": "ลงทะเบียนสำเร็จ!",
+      "register_prompt": "ที่อยู่อีเมล",
+      "login_help": "เข้าสู่ระบบด้วยโทเค็นที่มีอยู่",
+      "logout_help": "ลบโทเค็นที่บันทึกไว้",
+      "logout_success": "ออกจากระบบแล้ว โหมดกฎเท่านั้นยังคงใช้งานได้โดยไม่ต้องมีโทเค็น",
+      "status_help": "แสดงสถานะการยืนยันตัวตนปัจจุบัน",
+      "status_authenticated": "ยืนยันตัวตนแล้ว",
+      "status_not_authenticated": "ยังไม่ได้ยืนยันตัวตน",
+      "upgrade_help": "อัปเกรดบัญชีของคุณเป็นแพ็กเกจแบบชำระเงิน"
+    }
+  },
+  "errors": {
+    "file_not_found": "ไม่พบไฟล์: {path}",
+    "invalid_sql": "อินพุต SQL ไม่ถูกต้อง",
+    "connection_failed": "การเชื่อมต่อล้มเหลว: {error}",
+    "no_objects": "ไม่พบอ็อบเจกต์ในอินพุต"
+  },
+  "report": {
+    "title": "รายงานการย้ายข้อมูล SteinDB",
+    "summary": "สรุป",
+    "total_objects": "อ็อบเจกต์ทั้งหมด",
+    "auto_convertible": "แปลงอัตโนมัติได้",
+    "needs_ai": "ต้องการ AI ช่วยเหลือ",
+    "complexity_avg": "ความซับซ้อนเฉลี่ย",
+    "savings_estimate": "ประมาณการประหยัด"
+  }
+}

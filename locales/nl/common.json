@@ -1,0 +1,58 @@
+{
+  "app_name": "SteinDB",
+  "tagline": "Het enige bidirectionele Oracle ↔ PostgreSQL-migratietool",
+  "directions": {
+    "o2p": "Oracle naar PostgreSQL",
+    "p2o": "PostgreSQL naar Oracle"
+  },
+  "tiers": {
+    "free": "Gratis",
+    "registered": "Geregistreerd",
+    "solo": "Solo",
+    "team": "Team",
+    "enterprise": "Enterprise"
+  },
+  "roles": {
+    "owner": "Eigenaar",
+    "admin": "Beheerder",
+    "member": "Lid",
+    "viewer": "Kijker"
+  },
+  "actions": {
+    "save": "Opslaan",
+    "cancel": "Annuleren",
+    "delete": "Verwijderen",
+    "edit": "Bewerken",
+    "create": "Aanmaken",
+    "search": "Zoeken",
+    "filter": "Filteren",
+    "export": "Exporteren",
+    "download": "Downloaden",
+    "copy": "Kopiëren",
+    "copied": "Gekopieerd!",
+    "loading": "Laden...",
+    "submit": "Verzenden",
+    "confirm": "Bevestigen",
+    "back": "Terug",
+    "next": "Volgende",
+    "upgrade": "Upgraden",
+    "register": "Registreren",
+    "login": "Inloggen",
+    "logout": "Uitloggen"
+  },
+  "status": {
+    "active": "Actief",
+    "inactive": "Inactief",
+    "success": "Geslaagd",
+    "failed": "Mislukt",
+    "partial": "Gedeeltelijk",
+    "pending": "In behandeling"
+  },
+  "time": {
+    "just_now": "zojuist",
+    "minutes_ago": "{n} minuten geleden",
+    "hours_ago": "{n} uur geleden",
+    "days_ago": "{n} dagen geleden",
+    "yesterday": "gisteren"
+  }
+}

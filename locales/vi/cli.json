@@ -1,0 +1,53 @@
+{
+  "commands": {
+    "scan": {
+      "help": "Quét lược đồ Oracle/PostgreSQL và tạo báo cáo sẵn sàng di chuyển",
+      "scanning": "Đang quét {file}...",
+      "found_objects": "Tìm thấy {count} đối tượng",
+      "complexity": "Độ phức tạp: {score}/10",
+      "complete": "Quét hoàn tất trong {seconds}s"
+    },
+    "convert": {
+      "help": "Chuyển đổi Oracle SQL/PL-SQL sang PostgreSQL (hoặc ngược lại)",
+      "converting": "Đang chuyển đổi {count} đối tượng...",
+      "rules_only": "Sử dụng chế độ chỉ quy tắc (phạm vi 90%)",
+      "ai_required": "Chuyển đổi hỗ trợ AI yêu cầu đăng ký (miễn phí).\nĐăng ký: stein auth register --email you@company.com\nHoặc sử dụng chế độ chỉ quy tắc: stein convert myfile.sql",
+      "complete": "Đã chuyển đổi {converted}/{total} đối tượng",
+      "forwarded": "{count} đối tượng đã chuyển tiếp cho AI"
+    },
+    "verify": {
+      "help": "Xác minh tính chính xác của đầu ra PostgreSQL/Oracle đã chuyển đổi",
+      "verifying": "Đang xác minh {count} tệp...",
+      "green": "XANH — độ tin cậy cao",
+      "yellow": "VÀNG — khuyến nghị xem xét",
+      "red": "ĐỎ — cần sửa thủ công"
+    },
+    "auth": {
+      "register_help": "Đăng ký tài khoản SteinDB miễn phí",
+      "register_success": "Đăng ký thành công!",
+      "register_prompt": "Địa chỉ email",
+      "login_help": "Đăng nhập bằng token hiện có",
+      "logout_help": "Xóa token đã lưu",
+      "logout_success": "Đã đăng xuất. Chế độ chỉ quy tắc vẫn hoạt động mà không cần token.",
+      "status_help": "Hiển thị trạng thái xác thực hiện tại",
+      "status_authenticated": "Đã xác thực",
+      "status_not_authenticated": "Chưa xác thực",
+      "upgrade_help": "Nâng cấp tài khoản lên gói trả phí"
+    }
+  },
+  "errors": {
+    "file_not_found": "Không tìm thấy tệp: {path}",
+    "invalid_sql": "Đầu vào SQL không hợp lệ",
+    "connection_failed": "Kết nối thất bại: {error}",
+    "no_objects": "Không tìm thấy đối tượng trong đầu vào"
+  },
+  "report": {
+    "title": "Báo cáo Di chuyển SteinDB",
+    "summary": "Tóm tắt",
+    "total_objects": "Tổng số Đối tượng",
+    "auto_convertible": "Có thể tự động chuyển đổi",
+    "needs_ai": "Cần hỗ trợ AI",
+    "complexity_avg": "Độ phức tạp Trung bình",
+    "savings_estimate": "Ước tính Tiết kiệm"
+  }
+}

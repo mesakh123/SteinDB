@@ -1,0 +1,44 @@
+- name: public_synonym
+  category: synonyms
+  oracle: "CREATE PUBLIC SYNONYM employees FOR hr.employees"
+  expected_postgresql: "CREATE VIEW public.employees AS SELECT * FROM hr.employees"
+  constructs: ["PUBLIC SYNONYM"]
+
+- name: private_synonym
+  category: synonyms
+  oracle: "CREATE SYNONYM emp FOR hr.employees"
+  expected_postgresql: "CREATE VIEW emp AS SELECT * FROM hr.employees"
+  constructs: ["SYNONYM"]
+
+- name: synonym_for_dblink
+  category: synonyms
+  oracle: "CREATE SYNONYM remote_orders FOR orders@remote_db"
+  expected_postgresql: "CREATE VIEW remote_orders AS SELECT * FROM remote_db.orders"
+  constructs: ["SYNONYM", "DBLINK"]
+  tags: ["dblink"]
+
+- name: synonym_resolution
+  category: synonyms
+  oracle: "SELECT * FROM emp_syn"
+  expected_postgresql: "SELECT * FROM hr.employees"
+  constructs: ["SYNONYM"]
+  tags: ["resolution"]
+
+- name: drop_synonym
+  category: synonyms
+  oracle: "DROP SYNONYM emp"
+  expected_postgresql: "DROP VIEW IF EXISTS emp"
+  constructs: ["DROP SYNONYM"]
+
+- name: synonym_chain
+  category: synonyms
+  oracle: "CREATE SYNONYM emp_alias FOR emp_syn"
+  expected_postgresql: "CREATE VIEW emp_alias AS SELECT * FROM emp_syn"
+  constructs: ["SYNONYM"]
+  tags: ["chained"]
+
+- name: create_or_replace_synonym
+  category: synonyms
+  oracle: "CREATE OR REPLACE SYNONYM emp FOR hr.employees"
+  expected_postgresql: "CREATE OR REPLACE VIEW emp AS SELECT * FROM hr.employees"
+  constructs: ["SYNONYM", "CREATE OR REPLACE"]

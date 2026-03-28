@@ -1,0 +1,50 @@
+# Golden tests: Oracle conversion functions → PostgreSQL equivalents
+
+- name: to_char_number_format
+  category: functions
+  oracle: "SELECT TO_CHAR(salary, '999,999.99') FROM employees"
+  expected_postgresql: "SELECT TO_CHAR(salary, '999,999.99') FROM employees"
+  constructs: ["TO_CHAR"]
+  tags: ["no_change"]
+
+- name: to_char_date_format_conv
+  category: functions
+  oracle: "SELECT TO_CHAR(SYSDATE, 'YYYY-MM-DD') FROM DUAL"
+  expected_postgresql: "SELECT TO_CHAR(CURRENT_TIMESTAMP, 'YYYY-MM-DD')"
+  constructs: ["TO_CHAR", "SYSDATE", "DUAL"]
+
+- name: to_number_formatted
+  category: functions
+  oracle: "SELECT TO_NUMBER('1,234.56', '9,999.99') FROM DUAL"
+  expected_postgresql: "SELECT TO_NUMBER('1,234.56', '9,999.99')"
+  constructs: ["TO_NUMBER", "DUAL"]
+
+- name: to_date_formatted
+  category: functions
+  oracle: "SELECT TO_DATE('2024-06-15 14:30:00', 'YYYY-MM-DD HH24:MI:SS') FROM DUAL"
+  expected_postgresql: "SELECT TO_TIMESTAMP('2024-06-15 14:30:00', 'YYYY-MM-DD HH24:MI:SS')"
+  constructs: ["TO_DATE", "DUAL"]
+
+- name: cast_function
+  category: functions
+  oracle: "SELECT CAST(employee_id AS VARCHAR2(10)) FROM employees"
+  expected_postgresql: "SELECT CAST(employee_id AS VARCHAR(10)) FROM employees"
+  constructs: ["CAST", "VARCHAR2"]
+
+- name: rawtohex_to_encode
+  category: functions
+  oracle: "SELECT RAWTOHEX(raw_col) FROM data_table"
+  expected_postgresql: "SELECT ENCODE(raw_col, 'hex') FROM data_table"
+  constructs: ["RAWTOHEX"]
+
+- name: hextoraw_to_decode
+  category: functions
+  oracle: "SELECT HEXTORAW('48454C4C4F') FROM DUAL"
+  expected_postgresql: "SELECT DECODE('48454C4C4F', 'hex')"
+  constructs: ["HEXTORAW", "DUAL"]
+
+- name: to_clob_to_text
+  category: functions
+  oracle: "SELECT TO_CLOB(description) FROM products"
+  expected_postgresql: "SELECT description::TEXT FROM products"
+  constructs: ["TO_CLOB"]

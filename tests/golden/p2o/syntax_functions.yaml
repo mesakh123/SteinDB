@@ -1,0 +1,245 @@
+# =============================================================================
+# SteinDB Golden Tests — P2O Function Conversions (Extended)
+# PostgreSQL functions → Oracle function equivalents
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# STRING FUNCTIONS
+# ---------------------------------------------------------------------------
+
+- name: coalesce_two_args_to_nvl
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT COALESCE(nickname, 'N/A') FROM users"
+  expected: "SELECT NVL(nickname, 'N/A') /* NOTE: NVL evaluates both args; COALESCE short-circuits */ FROM users"
+  constructs: ["COALESCE"]
+  tags: ["function", "null_handling", "p2o"]
+  acceptance_criteria:
+    - "COALESCE(a,b) with 2 args maps to NVL(a,b)"
+    - "WARNING: NVL evaluates both arguments unconditionally"
+    - "COALESCE short-circuits (only evaluates until first non-NULL)"
+    - "Side-effect-producing second argument may behave differently"
+
+- name: substring_from_for_to_substr
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT SUBSTRING(name FROM 1 FOR 3) FROM users"
+  expected: "SELECT SUBSTR(name, 1, 3) FROM users"
+  constructs: ["SUBSTRING"]
+  tags: ["function", "string", "p2o"]
+
+- name: position_to_instr
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT POSITION('@' IN email) FROM users"
+  expected: "SELECT INSTR(email, '@') FROM users"
+  constructs: ["POSITION"]
+  tags: ["function", "string", "p2o"]
+
+- name: string_agg_to_listagg
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: >-
+    SELECT dept_id, STRING_AGG(name, ', ' ORDER BY name)
+    FROM employees GROUP BY dept_id
+  expected: >-
+    SELECT dept_id,
+      LISTAGG(name, ', ') WITHIN GROUP (ORDER BY name)
+    FROM employees GROUP BY dept_id
+  constructs: ["STRING_AGG"]
+  tags: ["function", "aggregate", "p2o"]
+
+# ---------------------------------------------------------------------------
+# REGEX / PATTERN MATCHING
+# ---------------------------------------------------------------------------
+
+- name: regex_match_to_regexp_like
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT * FROM users WHERE email ~ '^[a-z]+@example\\.com$'"
+  expected: "SELECT * FROM users WHERE REGEXP_LIKE(email, '^[a-z]+@example\\.com$')"
+  constructs: ["REGEX"]
+  tags: ["function", "regex", "p2o"]
+
+# ---------------------------------------------------------------------------
+# TYPE CASTING
+# ---------------------------------------------------------------------------
+
+- name: cast_numeric_to_to_number
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT CAST(amount_text AS NUMERIC) FROM invoices"
+  expected: "SELECT TO_NUMBER(amount_text) FROM invoices"
+  constructs: ["CAST"]
+  tags: ["function", "casting", "p2o"]
+
+# ---------------------------------------------------------------------------
+# BINARY / ENCODING FUNCTIONS
+# ---------------------------------------------------------------------------
+
+- name: octet_length_to_lengthb
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT OCTET_LENGTH(data) FROM files"
+  expected: "SELECT LENGTHB(data) FROM files"
+  constructs: ["OCTET_LENGTH"]
+  tags: ["function", "binary", "p2o"]
+
+- name: encode_hex_to_rawtohex
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT ENCODE(raw_data, 'hex') FROM binary_store"
+  expected: "SELECT RAWTOHEX(raw_data) FROM binary_store"
+  constructs: ["ENCODE"]
+  tags: ["function", "binary", "p2o"]
+
+# ---------------------------------------------------------------------------
+# SYSTEM / SESSION FUNCTIONS
+# ---------------------------------------------------------------------------
+
+- name: gen_random_uuid_to_sys_guid
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT gen_random_uuid()"
+  expected: "SELECT SYS_GUID() FROM DUAL"
+  constructs: ["gen_random_uuid"]
+  tags: ["function", "uuid", "p2o"]
+
+- name: random_to_dbms_random
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT random()"
+  expected: "SELECT DBMS_RANDOM.VALUE FROM DUAL"
+  constructs: ["random"]
+  tags: ["function", "random", "p2o"]
+
+- name: pg_backend_pid_to_userenv
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT pg_backend_pid()"
+  expected: "SELECT USERENV('SESSIONID') FROM DUAL"
+  constructs: ["pg_backend_pid"]
+  tags: ["function", "session", "p2o"]
+
+- name: current_database_to_sys_context
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT current_database()"
+  expected: "SELECT SYS_CONTEXT('USERENV', 'DB_NAME') FROM DUAL"
+  constructs: ["current_database"]
+  tags: ["function", "session", "p2o"]
+
+# ---------------------------------------------------------------------------
+# DATE/TIME FUNCTIONS
+# ---------------------------------------------------------------------------
+
+- name: now_to_sysdate
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT NOW()"
+  expected: "SELECT SYSDATE FROM DUAL"
+  constructs: ["NOW"]
+  tags: ["function", "datetime", "p2o"]
+
+- name: age_to_months_between
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT AGE(end_date, start_date) FROM contracts"
+  expected: "SELECT MONTHS_BETWEEN(end_date, start_date) FROM contracts"
+  constructs: ["AGE"]
+  tags: ["function", "datetime", "p2o"]
+  acceptance_criteria:
+    - "PG AGE returns INTERVAL, Oracle MONTHS_BETWEEN returns NUMBER"
+    - "Semantic difference: AGE gives years/months/days, MONTHS_BETWEEN gives fractional months"
+
+- name: date_part_to_extract
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT date_part('year', hire_date) FROM employees"
+  expected: "SELECT EXTRACT(YEAR FROM hire_date) FROM employees"
+  constructs: ["date_part"]
+  tags: ["function", "datetime", "p2o"]
+
+# ---------------------------------------------------------------------------
+# ADDITIONAL STRING FUNCTIONS
+# ---------------------------------------------------------------------------
+
+- name: concat_ws_to_concat_nvl
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT CONCAT_WS(', ', city, state, zip) FROM addresses"
+  expected: >-
+    SELECT city || ', ' || state || ', ' || zip FROM addresses
+  constructs: ["CONCAT_WS"]
+  tags: ["function", "string", "p2o"]
+  acceptance_criteria:
+    - "PG CONCAT_WS skips NULLs automatically"
+    - "Oracle concatenation propagates NULLs; may need NVL wrappers"
+
+- name: left_right_to_substr
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT LEFT(name, 3), RIGHT(name, 3) FROM users"
+  expected: "SELECT SUBSTR(name, 1, 3), SUBSTR(name, -3) FROM users"
+  constructs: ["LEFT", "RIGHT"]
+  tags: ["function", "string", "p2o"]
+
+- name: regexp_replace_to_regexp_replace
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT REGEXP_REPLACE(phone, '[^0-9]', '', 'g') FROM contacts"
+  expected: "SELECT REGEXP_REPLACE(phone, '[^0-9]', '') FROM contacts"
+  constructs: ["REGEXP_REPLACE"]
+  tags: ["function", "regex", "p2o"]
+  acceptance_criteria:
+    - "PG REGEXP_REPLACE requires 'g' flag for global replace"
+    - "Oracle REGEXP_REPLACE is global by default"
+
+- name: md5_to_dbms_crypto
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT MD5(password) FROM users"
+  expected: >-
+    SELECT LOWER(RAWTOHEX(DBMS_CRYPTO.HASH(UTL_RAW.CAST_TO_RAW(password), DBMS_CRYPTO.HASH_MD5)))
+    FROM users
+  constructs: ["MD5"]
+  tags: ["function", "crypto", "p2o"]
+
+- name: array_agg_to_collect
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT dept_id, ARRAY_AGG(name ORDER BY name) FROM employees GROUP BY dept_id"
+  expected: >-
+    SELECT dept_id, CAST(COLLECT(name ORDER BY name) AS SYS.ODCIVARCHAR2LIST)
+    FROM employees GROUP BY dept_id
+  constructs: ["ARRAY_AGG"]
+  tags: ["function", "aggregate", "p2o"]
+
+- name: unnest_to_table
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT unnest(ARRAY[1,2,3])"
+  expected: "SELECT COLUMN_VALUE FROM TABLE(SYS.ODCINUMBERLIST(1,2,3))"
+  constructs: ["unnest", "ARRAY"]
+  tags: ["function", "array", "p2o"]
+
+- name: to_char_timestamp_format
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') FROM events"
+  expected: "SELECT TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') FROM events"
+  constructs: ["TO_CHAR"]
+  tags: ["function", "datetime", "p2o"]
+  acceptance_criteria:
+    - "TO_CHAR format strings are mostly compatible between PG and Oracle"
+
+- name: greatest_least_same
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT GREATEST(a, b, c), LEAST(a, b, c) FROM numbers"
+  expected: "SELECT GREATEST(a, b, c), LEAST(a, b, c) FROM numbers"
+  constructs: ["GREATEST", "LEAST"]
+  tags: ["function", "comparison", "p2o"]
+  acceptance_criteria:
+    - "GREATEST/LEAST supported in both PG and Oracle"
+    - "NULL handling differs: PG returns NULL if any arg is NULL; Oracle skips NULLs"

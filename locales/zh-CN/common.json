@@ -1,0 +1,58 @@
+{
+  "app_name": "SteinDB",
+  "tagline": "唯一的双向Oracle ↔ PostgreSQL迁移工具",
+  "directions": {
+    "o2p": "Oracle到PostgreSQL",
+    "p2o": "PostgreSQL到Oracle"
+  },
+  "tiers": {
+    "free": "免费",
+    "registered": "已注册",
+    "solo": "个人版",
+    "team": "团队版",
+    "enterprise": "企业版"
+  },
+  "roles": {
+    "owner": "所有者",
+    "admin": "管理员",
+    "member": "成员",
+    "viewer": "查看者"
+  },
+  "actions": {
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "删除",
+    "edit": "编辑",
+    "create": "创建",
+    "search": "搜索",
+    "filter": "筛选",
+    "export": "导出",
+    "download": "下载",
+    "copy": "复制",
+    "copied": "已复制！",
+    "loading": "加载中...",
+    "submit": "提交",
+    "confirm": "确认",
+    "back": "返回",
+    "next": "下一步",
+    "upgrade": "升级",
+    "register": "注册",
+    "login": "登录",
+    "logout": "退出登录"
+  },
+  "status": {
+    "active": "活跃",
+    "inactive": "未激活",
+    "success": "成功",
+    "failed": "失败",
+    "partial": "部分完成",
+    "pending": "等待中"
+  },
+  "time": {
+    "just_now": "刚刚",
+    "minutes_ago": "{n}分钟前",
+    "hours_ago": "{n}小时前",
+    "days_ago": "{n}天前",
+    "yesterday": "昨天"
+  }
+}

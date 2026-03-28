@@ -1,0 +1,56 @@
+# Golden tests: Oracle numeric functions → PostgreSQL equivalents
+
+- name: to_number_cast
+  category: functions
+  oracle: "SELECT TO_NUMBER('456.78') FROM DUAL"
+  expected_postgresql: "SELECT CAST('456.78' AS NUMERIC)"
+  constructs: ["TO_NUMBER", "DUAL"]
+
+- name: round_function
+  category: functions
+  oracle: "SELECT ROUND(salary, 2) FROM employees"
+  expected_postgresql: "SELECT ROUND(salary, 2) FROM employees"
+  constructs: ["ROUND"]
+  tags: ["no_change"]
+
+- name: ceil_floor
+  category: functions
+  oracle: "SELECT CEIL(salary), FLOOR(salary) FROM employees"
+  expected_postgresql: "SELECT CEIL(salary), FLOOR(salary) FROM employees"
+  constructs: ["CEIL", "FLOOR"]
+  tags: ["no_change"]
+
+- name: mod_function
+  category: functions
+  oracle: "SELECT MOD(employee_id, 10) FROM employees"
+  expected_postgresql: "SELECT MOD(employee_id, 10) FROM employees"
+  constructs: ["MOD"]
+  tags: ["no_change"]
+
+- name: abs_function
+  category: functions
+  oracle: "SELECT ABS(salary - commission) FROM employees"
+  expected_postgresql: "SELECT ABS(salary - commission) FROM employees"
+  constructs: ["ABS"]
+  tags: ["no_change"]
+
+- name: sign_function
+  category: functions
+  oracle: "SELECT SIGN(balance) FROM accounts"
+  expected_postgresql: "SELECT SIGN(balance) FROM accounts"
+  constructs: ["SIGN"]
+  tags: ["no_change"]
+
+- name: trunc_number
+  category: functions
+  oracle: "SELECT TRUNC(salary, 2) FROM employees"
+  expected_postgresql: "SELECT TRUNC(salary, 2) FROM employees"
+  constructs: ["TRUNC"]
+  tags: ["no_change"]
+
+- name: power_function
+  category: functions
+  oracle: "SELECT POWER(base_val, exponent) FROM calculations"
+  expected_postgresql: "SELECT POWER(base_val, exponent) FROM calculations"
+  constructs: ["POWER"]
+  tags: ["no_change"]

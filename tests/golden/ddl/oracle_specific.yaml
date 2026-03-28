@@ -1,0 +1,198 @@
+# =============================================================================
+# SteinDB Golden Tests — Oracle-Specific DDL Patterns (O2P)
+# Oracle DDL patterns not yet covered, identified by external reviewers
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# CREATE TABLE ... ORGANIZATION INDEX (IOT)
+# ---------------------------------------------------------------------------
+
+- name: iot_table
+  category: ddl
+  oracle: >-
+    CREATE TABLE session_lookup (
+      session_id VARCHAR2(64) PRIMARY KEY,
+      user_id NUMBER(10),
+      created_at DATE
+    ) ORGANIZATION INDEX
+  expected_postgresql: >-
+    CREATE TABLE session_lookup (
+      session_id VARCHAR(64) PRIMARY KEY,
+      user_id INTEGER,
+      created_at TIMESTAMP
+    )
+  complexity: 5
+  constructs: ["ORGANIZATION INDEX"]
+  tags: ["iot", "storage", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle IOT stores data in primary key index structure"
+    - "PG has no IOT; remove ORGANIZATION INDEX clause"
+    - "Consider CLUSTER on primary key for similar physical ordering"
+
+# ---------------------------------------------------------------------------
+# CREATE TABLE ... COMPRESS
+# ---------------------------------------------------------------------------
+
+- name: table_compress
+  category: ddl
+  oracle: >-
+    CREATE TABLE audit_log (
+      id NUMBER(19),
+      event VARCHAR2(100),
+      created DATE
+    ) COMPRESS FOR OLTP
+  expected_postgresql: >-
+    CREATE TABLE audit_log (
+      id BIGINT,
+      event VARCHAR(100),
+      created TIMESTAMP
+    )
+  complexity: 3
+  constructs: ["COMPRESS"]
+  tags: ["storage", "remove_hint", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle table compression has no DDL equivalent in PG"
+    - "Remove COMPRESS clause; consider TOAST or extension for compression"
+
+# ---------------------------------------------------------------------------
+# ALTER TABLE ... ENABLE ROW MOVEMENT
+# ---------------------------------------------------------------------------
+
+- name: enable_row_movement
+  category: ddl
+  oracle: "ALTER TABLE sales ENABLE ROW MOVEMENT"
+  expected_postgresql: "-- ROW MOVEMENT not applicable in PostgreSQL (removed)"
+  complexity: 2
+  constructs: ["ROW MOVEMENT"]
+  tags: ["partitioning", "remove_hint", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle ROW MOVEMENT allows rows to move between partitions on UPDATE"
+    - "PG supports this natively in declarative partitioning; no DDL needed"
+
+# ---------------------------------------------------------------------------
+# CREATE TABLE ... RESULT_CACHE
+# ---------------------------------------------------------------------------
+
+- name: table_result_cache
+  category: ddl
+  oracle: >-
+    CREATE TABLE lookup_codes (
+      code VARCHAR2(10) PRIMARY KEY,
+      description VARCHAR2(200)
+    ) RESULT_CACHE (MODE FORCE)
+  expected_postgresql: >-
+    CREATE TABLE lookup_codes (
+      code VARCHAR(10) PRIMARY KEY,
+      description VARCHAR(200)
+    )
+  complexity: 3
+  constructs: ["RESULT_CACHE"]
+  tags: ["caching", "remove_hint", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle RESULT_CACHE on table has no PG equivalent"
+    - "Remove clause; PG relies on shared_buffers and OS page cache"
+
+# ---------------------------------------------------------------------------
+# FLASHBACK TABLE → no equivalent
+# ---------------------------------------------------------------------------
+
+- name: flashback_table
+  category: ddl
+  oracle: "FLASHBACK TABLE employees TO BEFORE DROP"
+  expected_postgresql: null
+  complexity: 10
+  constructs: ["FLASHBACK TABLE"]
+  tags: ["no_pg_equivalent", "manual_required", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle FLASHBACK TABLE recovers dropped tables from recycle bin"
+    - "PG has no equivalent; requires backup/restore strategy"
+    - "Flag for manual review"
+
+# ---------------------------------------------------------------------------
+# CREATE EDITION → no equivalent
+# ---------------------------------------------------------------------------
+
+- name: create_edition
+  category: ddl
+  oracle: "CREATE EDITION v2_release AS CHILD OF ora$base"
+  expected_postgresql: null
+  complexity: 10
+  constructs: ["EDITION"]
+  tags: ["no_pg_equivalent", "manual_required", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle Edition-Based Redefinition has no PG equivalent"
+    - "PG uses schema-based versioning or extension versioning"
+
+# ---------------------------------------------------------------------------
+# CREATE DATABASE LINK → dblink/FDW
+# ---------------------------------------------------------------------------
+
+- name: create_database_link
+  category: ddl
+  oracle: >-
+    CREATE DATABASE LINK remote_db
+    CONNECT TO remote_user IDENTIFIED BY secret123
+    USING 'remote_tns'
+  expected_postgresql: >-
+    CREATE EXTENSION IF NOT EXISTS postgres_fdw;
+    CREATE SERVER remote_db FOREIGN DATA WRAPPER postgres_fdw
+    OPTIONS (host 'remote_host', dbname 'remote_db', port '5432');
+    CREATE USER MAPPING FOR CURRENT_USER SERVER remote_db
+    OPTIONS (user 'remote_user', password 'secret123')
+  complexity: 8
+  constructs: ["DATABASE LINK"]
+  tags: ["distributed", "fdw", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle DB links map to PG Foreign Data Wrappers"
+    - "Requires postgres_fdw extension and server/user mapping setup"
+
+# ---------------------------------------------------------------------------
+# CREATE DIRECTORY → no equivalent
+# ---------------------------------------------------------------------------
+
+- name: create_directory
+  category: ddl
+  oracle: "CREATE OR REPLACE DIRECTORY data_dir AS '/opt/oracle/data'"
+  expected_postgresql: "-- Oracle DIRECTORY objects have no PG equivalent; use COPY ... FROM/TO or pg_read_file()"
+  complexity: 5
+  constructs: ["DIRECTORY"]
+  tags: ["no_pg_equivalent", "manual_required", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle DIRECTORY objects used with UTL_FILE and external tables"
+    - "PG uses COPY, pg_read_file(), or file_fdw instead"
+
+# ---------------------------------------------------------------------------
+# ALTER SESSION SET
+# ---------------------------------------------------------------------------
+
+- name: alter_session_set
+  category: ddl
+  oracle: "ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD HH24:MI:SS'"
+  expected_postgresql: "SET datestyle = 'ISO, YMD'"
+  complexity: 4
+  constructs: ["ALTER SESSION"]
+  tags: ["session", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle ALTER SESSION SET maps to PG SET command"
+    - "NLS parameters map to PG locale/format settings"
+    - "Specific mappings vary by parameter"
+
+# ---------------------------------------------------------------------------
+# CREATE CONTEXT → no equivalent
+# ---------------------------------------------------------------------------
+
+- name: create_context
+  category: ddl
+  oracle: >-
+    CREATE OR REPLACE CONTEXT app_ctx USING ctx_pkg
+  expected_postgresql: >-
+    -- Use custom GUC variables instead:
+    -- SET myapp.context_var = 'value';
+    -- SELECT current_setting('myapp.context_var');
+  complexity: 6
+  constructs: ["CONTEXT"]
+  tags: ["no_pg_equivalent", "session", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle application contexts have no direct PG equivalent"
+    - "PG custom GUC variables (SET myapp.var) provide similar functionality"
+    - "SYS_CONTEXT calls must be converted to current_setting()"

@@ -1,0 +1,187 @@
+# =============================================================================
+# SteinDB Golden Tests — Version-Specific Edge Cases
+# Oracle and PostgreSQL version-specific behaviors identified by reviewers
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Oracle 12c IDENTITY columns
+# ---------------------------------------------------------------------------
+
+- name: oracle_12c_identity_column
+  category: edge_cases
+  oracle: >-
+    CREATE TABLE orders (
+      id NUMBER GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1),
+      description VARCHAR2(200)
+    )
+  expected_postgresql: >-
+    CREATE TABLE orders (
+      id INTEGER GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1),
+      description VARCHAR(200)
+    )
+  complexity: 3
+  constructs: ["IDENTITY", "GENERATED ALWAYS"]
+  tags: ["oracle_12c", "identity", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle 12c+ IDENTITY syntax is very close to PG"
+    - "NUMBER maps to INTEGER; rest of syntax is compatible"
+
+# ---------------------------------------------------------------------------
+# Oracle 12c FETCH FIRST (row limiting clause)
+# ---------------------------------------------------------------------------
+
+- name: oracle_12c_fetch_first_with_offset
+  category: edge_cases
+  oracle: >-
+    SELECT employee_name, salary FROM employees
+    ORDER BY salary DESC
+    OFFSET 5 ROWS FETCH NEXT 10 ROWS ONLY
+  expected_postgresql: >-
+    SELECT employee_name, salary FROM employees
+    ORDER BY salary DESC
+    OFFSET 5 LIMIT 10
+  complexity: 2
+  constructs: ["FETCH NEXT", "OFFSET ROWS"]
+  tags: ["oracle_12c", "pagination", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle 12c+ row limiting clause maps to PG OFFSET/LIMIT"
+    - "PG also supports FETCH FIRST syntax natively"
+
+# ---------------------------------------------------------------------------
+# Oracle 18c private temporary tables
+# ---------------------------------------------------------------------------
+
+- name: oracle_18c_private_temp_table
+  category: edge_cases
+  oracle: >-
+    CREATE PRIVATE TEMPORARY TABLE ORA$PTT_temp_results (
+      id NUMBER(10),
+      result VARCHAR2(100)
+    ) ON COMMIT DROP DEFINITION
+  expected_postgresql: >-
+    CREATE TEMPORARY TABLE temp_results (
+      id INTEGER,
+      result VARCHAR(100)
+    ) ON COMMIT DROP
+  complexity: 4
+  constructs: ["PRIVATE TEMPORARY TABLE"]
+  tags: ["oracle_18c", "temp_table", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle 18c private temp tables (ORA$PTT_ prefix) map to PG temp tables"
+    - "ON COMMIT DROP DEFINITION maps to ON COMMIT DROP"
+    - "Remove ORA$PTT_ prefix in PG"
+
+# ---------------------------------------------------------------------------
+# Oracle 21c JSON native type
+# ---------------------------------------------------------------------------
+
+- name: oracle_21c_json_native_type
+  category: edge_cases
+  oracle: >-
+    CREATE TABLE events (
+      id NUMBER(19),
+      payload JSON
+    )
+  expected_postgresql: >-
+    CREATE TABLE events (
+      id BIGINT,
+      payload JSONB
+    )
+  complexity: 2
+  constructs: ["JSON_TYPE"]
+  tags: ["oracle_21c", "json", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle 21c native JSON type maps to PG JSONB"
+    - "JSONB preferred over JSON in PG for indexing and operators"
+
+# ---------------------------------------------------------------------------
+# Oracle 23c BOOLEAN type
+# ---------------------------------------------------------------------------
+
+- name: oracle_23c_boolean_type
+  category: edge_cases
+  oracle: >-
+    CREATE TABLE feature_flags (
+      name VARCHAR2(100) PRIMARY KEY,
+      enabled BOOLEAN DEFAULT FALSE
+    )
+  expected_postgresql: >-
+    CREATE TABLE feature_flags (
+      name VARCHAR(100) PRIMARY KEY,
+      enabled BOOLEAN DEFAULT FALSE
+    )
+  complexity: 1
+  constructs: ["BOOLEAN"]
+  tags: ["oracle_23c", "boolean", "no_change", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle 23c finally supports native BOOLEAN type"
+    - "Maps directly to PG BOOLEAN with no changes"
+    - "Pre-23c Oracle uses NUMBER(1) which needs conversion"
+
+# ---------------------------------------------------------------------------
+# Oracle 23c IF NOT EXISTS on DDL
+# ---------------------------------------------------------------------------
+
+- name: oracle_23c_if_not_exists
+  category: edge_cases
+  oracle: "CREATE TABLE IF NOT EXISTS audit_log (id NUMBER(19), msg VARCHAR2(4000))"
+  expected_postgresql: "CREATE TABLE IF NOT EXISTS audit_log (id BIGINT, msg VARCHAR(4000))"
+  complexity: 1
+  constructs: ["IF NOT EXISTS"]
+  tags: ["oracle_23c", "ddl", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle 23c added IF NOT EXISTS support"
+    - "PG has supported IF NOT EXISTS since PG 9.1"
+    - "Syntax is directly compatible"
+
+# ---------------------------------------------------------------------------
+# PG 15+ MERGE statement → Oracle MERGE
+# ---------------------------------------------------------------------------
+
+- name: pg15_merge_to_oracle_merge
+  category: edge_cases
+  oracle: >-
+    MERGE INTO target t
+    USING source s ON (t.id = s.id)
+    WHEN MATCHED THEN UPDATE SET t.val = s.val
+    WHEN NOT MATCHED THEN INSERT (id, val) VALUES (s.id, s.val)
+  expected_postgresql: >-
+    MERGE INTO target t
+    USING source s ON (t.id = s.id)
+    WHEN MATCHED THEN UPDATE SET val = s.val
+    WHEN NOT MATCHED THEN INSERT (id, val) VALUES (s.id, s.val)
+  complexity: 3
+  constructs: ["MERGE"]
+  tags: ["pg15", "merge", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle MERGE syntax is nearly identical to PG 15+ MERGE"
+    - "PG UPDATE SET does not use table alias prefix"
+    - "Pre-PG15 would need INSERT ... ON CONFLICT"
+
+# ---------------------------------------------------------------------------
+# PG 14+ CYCLE clause in CTE → Oracle CONNECT BY NOCYCLE
+# ---------------------------------------------------------------------------
+
+- name: cte_cycle_detection
+  category: edge_cases
+  oracle: >-
+    SELECT employee_id, manager_id, LEVEL
+    FROM employees
+    START WITH manager_id IS NULL
+    CONNECT BY NOCYCLE PRIOR employee_id = manager_id
+  expected_postgresql: >-
+    WITH RECURSIVE org_tree AS (
+      SELECT employee_id, manager_id, 1 AS lvl
+      FROM employees WHERE manager_id IS NULL
+      UNION ALL
+      SELECT e.employee_id, e.manager_id, t.lvl + 1
+      FROM employees e JOIN org_tree t ON e.manager_id = t.employee_id
+    ) CYCLE employee_id SET is_cycle USING path
+    SELECT employee_id, manager_id, lvl FROM org_tree WHERE NOT is_cycle
+  complexity: 8
+  constructs: ["CONNECT BY NOCYCLE", "CYCLE"]
+  tags: ["pg14", "recursive_cte", "hierarchical", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle CONNECT BY NOCYCLE prevents infinite loops in hierarchies"
+    - "PG 14+ CYCLE clause provides standard SQL cycle detection"
+    - "Pre-PG14 requires manual path tracking with array"

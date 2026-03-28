@@ -1,0 +1,571 @@
+# =============================================================================
+# SteinDB Golden Tests — P2O Object Conversions
+# PostgreSQL views, materialized views, schemas, partitioning, types → Oracle
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# VIEWS
+# ---------------------------------------------------------------------------
+
+- name: simple_view_with_pg_types
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: >-
+    CREATE VIEW active_users AS
+    SELECT id, name, email FROM users WHERE is_active = TRUE
+  expected: >-
+    CREATE VIEW active_users AS
+    SELECT id, name, email FROM users WHERE is_active = 1
+  constructs: ["VIEW", "BOOLEAN"]
+  tags: ["view", "p2o"]
+
+- name: view_with_pg_functions
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: >-
+    CREATE VIEW recent_orders AS
+    SELECT id, customer_id, total,
+           AGE(NOW(), order_date) AS order_age
+    FROM orders WHERE order_date > NOW() - INTERVAL '30 days'
+  expected: >-
+    CREATE VIEW recent_orders AS
+    SELECT id, customer_id, total,
+           NUMTODSINTERVAL(SYSDATE - order_date, 'DAY') AS order_age
+    FROM orders WHERE order_date > SYSDATE - 30
+  constructs: ["VIEW", "AGE", "NOW", "INTERVAL"]
+  tags: ["view", "p2o"]
+
+# ---------------------------------------------------------------------------
+# MATERIALIZED VIEWS
+# ---------------------------------------------------------------------------
+
+- name: mview_basic
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: >-
+    CREATE MATERIALIZED VIEW mv_sales_summary AS
+    SELECT product_id, SUM(quantity) AS total_qty, SUM(amount) AS total_amount
+    FROM sales GROUP BY product_id
+  expected: >-
+    CREATE MATERIALIZED VIEW mv_sales_summary
+    BUILD IMMEDIATE
+    REFRESH FORCE ON DEMAND
+    AS SELECT product_id, SUM(quantity) AS total_qty, SUM(amount) AS total_amount
+    FROM sales GROUP BY product_id
+  constructs: ["MATERIALIZED VIEW"]
+  tags: ["mview", "p2o"]
+
+- name: mview_refresh_command
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: "REFRESH MATERIALIZED VIEW mv_sales_summary"
+  expected: "EXEC DBMS_MVIEW.REFRESH('mv_sales_summary', 'C')"
+  constructs: ["REFRESH MATERIALIZED VIEW"]
+  tags: ["mview", "p2o"]
+
+- name: mview_with_no_data
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: >-
+    CREATE MATERIALIZED VIEW mv_report AS
+    SELECT dept_id, COUNT(*) AS emp_count FROM employees GROUP BY dept_id
+    WITH NO DATA
+  expected: >-
+    CREATE MATERIALIZED VIEW mv_report
+    BUILD DEFERRED
+    REFRESH COMPLETE ON DEMAND
+    AS SELECT dept_id, COUNT(*) AS emp_count FROM employees GROUP BY dept_id
+  constructs: ["MATERIALIZED VIEW", "WITH NO DATA"]
+  tags: ["mview", "p2o"]
+  acceptance_criteria:
+    - "PG WITH NO DATA maps to Oracle BUILD DEFERRED"
+    - "Must explicitly refresh before first use"
+
+- name: mview_with_unique_index
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: >-
+    CREATE MATERIALIZED VIEW mv_product_stats AS
+    SELECT product_id, AVG(rating) AS avg_rating FROM reviews GROUP BY product_id;
+    CREATE UNIQUE INDEX idx_mv_product ON mv_product_stats (product_id)
+  expected: >-
+    CREATE MATERIALIZED VIEW mv_product_stats
+    BUILD IMMEDIATE
+    REFRESH FORCE ON DEMAND
+    AS SELECT product_id, AVG(rating) AS avg_rating FROM reviews GROUP BY product_id;
+    CREATE UNIQUE INDEX idx_mv_product ON mv_product_stats (product_id)
+  constructs: ["MATERIALIZED VIEW", "UNIQUE INDEX"]
+  tags: ["mview", "index", "p2o"]
+
+# ---------------------------------------------------------------------------
+# SCHEMA → PACKAGE (reverse of O2P package→schema)
+# ---------------------------------------------------------------------------
+
+- name: schema_functions_to_package
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: >-
+    CREATE SCHEMA utils;
+    CREATE FUNCTION utils.format_date(d DATE) RETURNS TEXT AS $$
+    BEGIN RETURN TO_CHAR(d, 'YYYY-MM-DD'); END;
+    $$ LANGUAGE plpgsql;
+    CREATE FUNCTION utils.format_number(n NUMERIC) RETURNS TEXT AS $$
+    BEGIN RETURN TO_CHAR(n, '999,999.99'); END;
+    $$ LANGUAGE plpgsql
+  expected: >-
+    CREATE OR REPLACE PACKAGE utils AS
+      FUNCTION format_date(d DATE) RETURN VARCHAR2;
+      FUNCTION format_number(n NUMBER) RETURN VARCHAR2;
+    END utils;
+    /
+    CREATE OR REPLACE PACKAGE BODY utils AS
+      FUNCTION format_date(d DATE) RETURN VARCHAR2 IS
+      BEGIN RETURN TO_CHAR(d, 'YYYY-MM-DD'); END;
+      FUNCTION format_number(n NUMBER) RETURN VARCHAR2 IS
+      BEGIN RETURN TO_CHAR(n, '999,999.99'); END;
+    END utils;
+    /
+  complexity: 7
+  constructs: ["SCHEMA", "FUNCTION", "PACKAGE"]
+  tags: ["package", "schema", "p2o"]
+  acceptance_criteria:
+    - "PG schema with functions reverse-maps to Oracle PACKAGE"
+    - "This is the reverse of O2P PACKAGE → schema"
+
+- name: search_path_to_synonyms
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: >-
+    SET search_path TO sales, shared, public;
+    SELECT * FROM customers
+  expected: >-
+    /* PG search_path maps to Oracle synonyms */
+    CREATE OR REPLACE SYNONYM customers FOR sales.customers;
+    SELECT * FROM customers
+  complexity: 5
+  constructs: ["search_path", "SYNONYM"]
+  tags: ["synonym", "schema", "p2o"]
+  acceptance_criteria:
+    - "PG search_path is reverse of O2P synonyms→search_path"
+    - "Must create synonyms for each unqualified table reference"
+
+# ---------------------------------------------------------------------------
+# PARTITIONING
+# ---------------------------------------------------------------------------
+
+- name: range_partition
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: >-
+    CREATE TABLE sales (
+      id SERIAL, sale_date DATE, amount NUMERIC(10,2)
+    ) PARTITION BY RANGE (sale_date);
+    CREATE TABLE sales_2024 PARTITION OF sales
+    FOR VALUES FROM ('2024-01-01') TO ('2025-01-01');
+    CREATE TABLE sales_2025 PARTITION OF sales
+    FOR VALUES FROM ('2025-01-01') TO ('2026-01-01')
+  expected: >-
+    CREATE TABLE sales (
+      id NUMBER GENERATED BY DEFAULT AS IDENTITY,
+      sale_date DATE,
+      amount NUMBER(10,2)
+    ) PARTITION BY RANGE (sale_date) (
+      PARTITION sales_2024 VALUES LESS THAN (DATE '2025-01-01'),
+      PARTITION sales_2025 VALUES LESS THAN (DATE '2026-01-01')
+    )
+  complexity: 6
+  constructs: ["PARTITION BY RANGE"]
+  tags: ["partitioning", "p2o"]
+
+- name: list_partition
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: >-
+    CREATE TABLE orders (
+      id SERIAL, region VARCHAR(20), total NUMERIC(10,2)
+    ) PARTITION BY LIST (region);
+    CREATE TABLE orders_east PARTITION OF orders FOR VALUES IN ('east', 'northeast');
+    CREATE TABLE orders_west PARTITION OF orders FOR VALUES IN ('west', 'northwest')
+  expected: >-
+    CREATE TABLE orders (
+      id NUMBER GENERATED BY DEFAULT AS IDENTITY,
+      region VARCHAR2(20),
+      total NUMBER(10,2)
+    ) PARTITION BY LIST (region) (
+      PARTITION orders_east VALUES ('east', 'northeast'),
+      PARTITION orders_west VALUES ('west', 'northwest')
+    )
+  complexity: 5
+  constructs: ["PARTITION BY LIST"]
+  tags: ["partitioning", "p2o"]
+
+- name: hash_partition
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: >-
+    CREATE TABLE events (
+      id SERIAL, user_id INTEGER, event_type VARCHAR(50)
+    ) PARTITION BY HASH (user_id);
+    CREATE TABLE events_p0 PARTITION OF events FOR VALUES WITH (MODULUS 4, REMAINDER 0);
+    CREATE TABLE events_p1 PARTITION OF events FOR VALUES WITH (MODULUS 4, REMAINDER 1);
+    CREATE TABLE events_p2 PARTITION OF events FOR VALUES WITH (MODULUS 4, REMAINDER 2);
+    CREATE TABLE events_p3 PARTITION OF events FOR VALUES WITH (MODULUS 4, REMAINDER 3)
+  expected: >-
+    CREATE TABLE events (
+      id NUMBER GENERATED BY DEFAULT AS IDENTITY,
+      user_id NUMBER(10),
+      event_type VARCHAR2(50)
+    ) PARTITION BY HASH (user_id)
+    PARTITIONS 4
+  complexity: 5
+  constructs: ["PARTITION BY HASH"]
+  tags: ["partitioning", "p2o"]
+
+- name: partition_default
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: >-
+    CREATE TABLE logs (
+      id SERIAL, log_level VARCHAR(10), message TEXT
+    ) PARTITION BY LIST (log_level);
+    CREATE TABLE logs_error PARTITION OF logs FOR VALUES IN ('ERROR');
+    CREATE TABLE logs_warn PARTITION OF logs FOR VALUES IN ('WARN');
+    CREATE TABLE logs_default PARTITION OF logs DEFAULT
+  expected: >-
+    CREATE TABLE logs (
+      id NUMBER GENERATED BY DEFAULT AS IDENTITY,
+      log_level VARCHAR2(10),
+      message CLOB
+    ) PARTITION BY LIST (log_level) (
+      PARTITION logs_error VALUES ('ERROR'),
+      PARTITION logs_warn VALUES ('WARN'),
+      PARTITION logs_default VALUES (DEFAULT)
+    )
+  complexity: 5
+  constructs: ["PARTITION BY LIST", "DEFAULT"]
+  tags: ["partitioning", "p2o"]
+
+- name: partition_attach_to_exchange
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: "ALTER TABLE sales ATTACH PARTITION sales_2026 FOR VALUES FROM ('2026-01-01') TO ('2027-01-01')"
+  expected: >-
+    ALTER TABLE sales ADD PARTITION sales_2026 VALUES LESS THAN (DATE '2027-01-01')
+  constructs: ["ATTACH PARTITION"]
+  tags: ["partitioning", "p2o"]
+
+- name: partition_detach
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: "ALTER TABLE sales DETACH PARTITION sales_2023"
+  expected: >-
+    ALTER TABLE sales EXCHANGE PARTITION sales_2023
+    WITH TABLE sales_2023_standalone INCLUDING INDEXES WITHOUT VALIDATION
+  complexity: 6
+  constructs: ["DETACH PARTITION"]
+  tags: ["partitioning", "p2o"]
+
+# ---------------------------------------------------------------------------
+# SCHEMA / PRIVILEGE MANAGEMENT
+# ---------------------------------------------------------------------------
+
+- name: create_schema_to_create_user
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: "CREATE SCHEMA analytics"
+  expected: >-
+    /* PG schema maps to Oracle user/schema (different semantics) */
+    CREATE USER analytics IDENTIFIED BY temp_password
+    DEFAULT TABLESPACE users QUOTA UNLIMITED ON users
+  constructs: ["CREATE SCHEMA"]
+  tags: ["schema", "p2o"]
+  acceptance_criteria:
+    - "In Oracle, schema = user; creating a schema requires creating a user"
+
+- name: grant_on_schema
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: "GRANT USAGE ON SCHEMA analytics TO app_user"
+  expected: >-
+    /* PG GRANT USAGE ON SCHEMA has no single Oracle equivalent */
+    /* Grant SELECT on individual objects or use roles */
+    GRANT SELECT ANY TABLE TO app_user
+  constructs: ["GRANT", "SCHEMA"]
+  tags: ["schema", "privilege", "p2o"]
+
+- name: revoke_all_tables_in_schema
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: "REVOKE ALL ON ALL TABLES IN SCHEMA analytics FROM readonly_user"
+  expected: >-
+    /* Must revoke on each table individually in Oracle */
+    /* LLM-required: generate REVOKE for each table in schema */
+    BEGIN
+      FOR t IN (SELECT table_name FROM all_tables WHERE owner = 'ANALYTICS') LOOP
+        EXECUTE IMMEDIATE 'REVOKE ALL ON ANALYTICS.' || t.table_name || ' FROM readonly_user';
+      END LOOP;
+    END;
+    /
+  complexity: 6
+  constructs: ["REVOKE", "ALL TABLES IN SCHEMA"]
+  tags: ["schema", "privilege", "llm_required", "p2o"]
+
+- name: alter_default_privileges_no_equivalent
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: >-
+    ALTER DEFAULT PRIVILEGES IN SCHEMA analytics
+    GRANT SELECT ON TABLES TO readonly_role
+  expected: >-
+    /* ALTER DEFAULT PRIVILEGES has no Oracle equivalent */
+    /* Must grant privileges explicitly after each new table creation */
+    /* Consider using Oracle roles and granting after DDL via trigger */
+    /* LLM-required: implement via DDL trigger */
+    CREATE OR REPLACE TRIGGER trg_auto_grant
+    AFTER CREATE ON SCHEMA
+    BEGIN
+      IF ORA_DICT_OBJ_TYPE = 'TABLE' THEN
+        EXECUTE IMMEDIATE 'GRANT SELECT ON ' || ORA_DICT_OBJ_NAME || ' TO readonly_role';
+      END IF;
+    END;
+    /
+  complexity: 7
+  constructs: ["ALTER DEFAULT PRIVILEGES"]
+  tags: ["schema", "privilege", "llm_required", "p2o"]
+
+# ---------------------------------------------------------------------------
+# TYPE CONVERSIONS
+# ---------------------------------------------------------------------------
+
+- name: table_inheritance_to_manual
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: >-
+    CREATE TABLE vehicles (id SERIAL PRIMARY KEY, make VARCHAR(50), year INTEGER);
+    CREATE TABLE cars (num_doors INTEGER, trunk_size NUMERIC(5,2)) INHERITS (vehicles)
+  expected: >-
+    /* Table inheritance has no Oracle equivalent; LLM-required */
+    CREATE TABLE vehicles (
+      id NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+      make VARCHAR2(50),
+      year NUMBER(10)
+    );
+    CREATE TABLE cars (
+      id NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+      make VARCHAR2(50),
+      year NUMBER(10),
+      num_doors NUMBER(10),
+      trunk_size NUMBER(5,2)
+    )
+  complexity: 8
+  constructs: ["INHERITS"]
+  tags: ["type", "llm_required", "p2o"]
+  acceptance_criteria:
+    - "PG INHERITS has no Oracle equivalent"
+    - "Must flatten inherited columns into child table"
+
+- name: composite_type_to_object_type
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: >-
+    CREATE TYPE address_type AS (
+      street VARCHAR(200),
+      city VARCHAR(100),
+      state CHAR(2),
+      zip VARCHAR(10)
+    )
+  expected: >-
+    CREATE OR REPLACE TYPE address_type AS OBJECT (
+      street VARCHAR2(200),
+      city VARCHAR2(100),
+      state CHAR(2),
+      zip VARCHAR2(10)
+    )
+  constructs: ["COMPOSITE TYPE"]
+  tags: ["type", "p2o"]
+
+- name: enum_type_to_check_constraint
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: >-
+    CREATE TYPE status_enum AS ENUM ('draft', 'pending', 'active', 'archived');
+    CREATE TABLE documents (id SERIAL, status status_enum)
+  expected: >-
+    CREATE TABLE documents (
+      id NUMBER GENERATED BY DEFAULT AS IDENTITY,
+      status VARCHAR2(20) CHECK (status IN ('draft', 'pending', 'active', 'archived'))
+    )
+  constructs: ["ENUM"]
+  tags: ["type", "p2o"]
+
+- name: domain_to_type_constraint
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: >-
+    CREATE DOMAIN positive_int AS INTEGER CHECK (VALUE > 0);
+    CREATE TABLE products (id SERIAL, quantity positive_int)
+  expected: >-
+    /* PG DOMAIN maps to Oracle column type + CHECK constraint */
+    CREATE TABLE products (
+      id NUMBER GENERATED BY DEFAULT AS IDENTITY,
+      quantity NUMBER(10) CHECK (quantity > 0)
+    )
+  constructs: ["DOMAIN"]
+  tags: ["type", "p2o"]
+  acceptance_criteria:
+    - "Oracle has no DOMAIN concept"
+    - "Must inline the domain as column type + CHECK constraint"
+
+# ---------------------------------------------------------------------------
+# ADDITIONAL OBJECT PATTERNS
+# ---------------------------------------------------------------------------
+
+- name: create_or_replace_view
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE VIEW order_totals AS
+    SELECT customer_id, SUM(amount) AS total,
+           COUNT(*) AS order_count
+    FROM orders GROUP BY customer_id
+  expected: >-
+    CREATE OR REPLACE VIEW order_totals AS
+    SELECT customer_id, SUM(amount) AS total,
+           COUNT(*) AS order_count
+    FROM orders GROUP BY customer_id
+  constructs: ["CREATE OR REPLACE VIEW"]
+  tags: ["view", "p2o"]
+
+- name: mview_with_index_and_refresh
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: >-
+    CREATE MATERIALIZED VIEW mv_daily_sales AS
+    SELECT DATE_TRUNC('day', sale_date) AS sale_day,
+           SUM(amount) AS daily_total
+    FROM sales GROUP BY DATE_TRUNC('day', sale_date);
+    CREATE INDEX idx_mv_daily ON mv_daily_sales (sale_day)
+  expected: >-
+    CREATE MATERIALIZED VIEW mv_daily_sales
+    BUILD IMMEDIATE
+    REFRESH FORCE ON DEMAND
+    AS SELECT TRUNC(sale_date) AS sale_day,
+              SUM(amount) AS daily_total
+    FROM sales GROUP BY TRUNC(sale_date);
+    CREATE INDEX idx_mv_daily ON mv_daily_sales (sale_day)
+  constructs: ["MATERIALIZED VIEW", "DATE_TRUNC", "INDEX"]
+  tags: ["mview", "p2o"]
+
+- name: range_subpartition
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: >-
+    CREATE TABLE measurements (
+      id SERIAL, sensor_id INTEGER, measured_at DATE, value NUMERIC
+    ) PARTITION BY RANGE (measured_at);
+    CREATE TABLE measurements_2024 PARTITION OF measurements
+    FOR VALUES FROM ('2024-01-01') TO ('2025-01-01')
+    PARTITION BY LIST (sensor_id);
+    CREATE TABLE measurements_2024_s1 PARTITION OF measurements_2024
+    FOR VALUES IN (1, 2, 3)
+  expected: >-
+    CREATE TABLE measurements (
+      id NUMBER GENERATED BY DEFAULT AS IDENTITY,
+      sensor_id NUMBER(10),
+      measured_at DATE,
+      value NUMBER
+    ) PARTITION BY RANGE (measured_at)
+    SUBPARTITION BY LIST (sensor_id) (
+      PARTITION measurements_2024 VALUES LESS THAN (DATE '2025-01-01') (
+        SUBPARTITION measurements_2024_s1 VALUES (1, 2, 3)
+      )
+    )
+  complexity: 7
+  constructs: ["PARTITION", "SUBPARTITION"]
+  tags: ["partitioning", "p2o"]
+
+- name: drop_type_cascade
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: "DROP TYPE IF EXISTS address_type CASCADE"
+  expected: >-
+    BEGIN
+      EXECUTE IMMEDIATE 'DROP TYPE address_type FORCE';
+    EXCEPTION WHEN OTHERS THEN
+      IF SQLCODE != -4043 THEN RAISE; END IF;
+    END;
+    /
+  constructs: ["DROP TYPE", "CASCADE"]
+  tags: ["type", "p2o"]
+
+- name: array_type_column_to_nested_table
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: "CREATE TABLE posts (id SERIAL, tags TEXT[])"
+  expected: >-
+    CREATE OR REPLACE TYPE tags_nt AS TABLE OF VARCHAR2(4000);
+    /
+    CREATE TABLE posts (id NUMBER GENERATED BY DEFAULT AS IDENTITY, tags tags_nt)
+    NESTED TABLE tags STORE AS posts_tags_nt
+  complexity: 6
+  constructs: ["ARRAY", "TEXT[]"]
+  tags: ["type", "array", "p2o"]
+
+- name: create_index_with_include
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: "CREATE INDEX idx_orders_status ON orders (status) INCLUDE (customer_id, total)"
+  expected: >-
+    /* Oracle has no INCLUDE clause; use a composite index instead */
+    CREATE INDEX idx_orders_status ON orders (status, customer_id, total)
+  constructs: ["CREATE INDEX", "INCLUDE"]
+  tags: ["index", "p2o"]
+
+- name: partial_index_to_fbi
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: "CREATE INDEX idx_active_users ON users (email) WHERE is_active = TRUE"
+  expected: >-
+    CREATE INDEX idx_active_users ON users (
+      CASE WHEN is_active = 1 THEN email ELSE NULL END
+    )
+  constructs: ["PARTIAL INDEX", "WHERE"]
+  tags: ["index", "p2o"]
+  acceptance_criteria:
+    - "PG partial indexes have no Oracle equivalent"
+    - "Use function-based index with CASE expression"
+
+- name: expression_index
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: "CREATE INDEX idx_lower_email ON users (LOWER(email))"
+  expected: "CREATE INDEX idx_lower_email ON users (LOWER(email))"
+  constructs: ["EXPRESSION INDEX"]
+  tags: ["index", "p2o"]
+  acceptance_criteria:
+    - "Oracle supports function-based indexes natively"
+
+- name: drop_index_concurrently
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: "DROP INDEX CONCURRENTLY IF EXISTS idx_orders_status"
+  expected: >-
+    /* Oracle has no DROP INDEX CONCURRENTLY */
+    BEGIN
+      EXECUTE IMMEDIATE 'DROP INDEX idx_orders_status';
+    EXCEPTION WHEN OTHERS THEN
+      IF SQLCODE != -1418 THEN RAISE; END IF;
+    END;
+    /
+  constructs: ["DROP INDEX CONCURRENTLY"]
+  tags: ["index", "p2o"]
+
+- name: create_sequence_as_type
+  category: p2o_objects
+  direction: pg_to_oracle
+  source: "CREATE SEQUENCE small_seq AS SMALLINT START WITH 1"
+  expected: >-
+    /* Oracle sequences do not have AS type; use MINVALUE/MAXVALUE */
+    CREATE SEQUENCE small_seq START WITH 1 MINVALUE -32768 MAXVALUE 32767
+  constructs: ["SEQUENCE", "AS SMALLINT"]
+  tags: ["sequence", "p2o"]

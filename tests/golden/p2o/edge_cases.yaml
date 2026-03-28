@@ -1,0 +1,941 @@
+# =============================================================================
+# SteinDB Golden Tests — P2O Edge Cases
+# PostgreSQL-specific patterns that require special handling for Oracle conversion
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# BOOLEAN HANDLING
+# ---------------------------------------------------------------------------
+
+- name: boolean_in_where_to_number1
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT * FROM users WHERE is_active"
+  expected: "SELECT * FROM users WHERE is_active = 1"
+  constructs: ["BOOLEAN"]
+  tags: ["edge_case", "boolean", "p2o"]
+
+- name: boolean_not_in_where
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT * FROM users WHERE NOT is_deleted"
+  expected: "SELECT * FROM users WHERE is_deleted = 0"
+  constructs: ["BOOLEAN", "NOT"]
+  tags: ["edge_case", "boolean", "p2o"]
+
+- name: boolean_case_expression
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: >-
+    SELECT name, CASE WHEN is_active THEN 'Yes' ELSE 'No' END AS status
+    FROM users
+  expected: >-
+    SELECT name, CASE WHEN is_active = 1 THEN 'Yes' ELSE 'No' END AS status
+    FROM users
+  constructs: ["BOOLEAN", "CASE"]
+  tags: ["edge_case", "boolean", "p2o"]
+
+# ---------------------------------------------------------------------------
+# TEXT / CLOB BOUNDARY
+# ---------------------------------------------------------------------------
+
+- name: text_over_4000_to_clob
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (content TEXT)"
+  expected: "CREATE TABLE t (content CLOB)"
+  constructs: ["TEXT"]
+  tags: ["edge_case", "lob", "p2o"]
+  acceptance_criteria:
+    - "PG TEXT has no length limit; Oracle VARCHAR2 max is 4000 bytes"
+    - "TEXT must always map to CLOB for safety"
+
+- name: varchar_over_4000_to_clob
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (body VARCHAR(8000))"
+  expected: "CREATE TABLE t (body CLOB)"
+  constructs: ["VARCHAR"]
+  tags: ["edge_case", "lob", "p2o"]
+  acceptance_criteria:
+    - "VARCHAR(>4000) exceeds Oracle VARCHAR2 limit"
+    - "Must promote to CLOB"
+
+# ---------------------------------------------------------------------------
+# JSONB OPERATORS
+# ---------------------------------------------------------------------------
+
+- name: jsonb_arrow_text_to_json_value
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT data->>'email' FROM contacts"
+  expected: "SELECT JSON_VALUE(data, '$.email') FROM contacts"
+  constructs: ["JSONB", "->>"]
+  tags: ["edge_case", "json", "p2o"]
+
+- name: jsonb_arrow_object_to_json_query
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT data->'address' FROM contacts"
+  expected: "SELECT JSON_QUERY(data, '$.address') FROM contacts"
+  constructs: ["JSONB", "->"]
+  tags: ["edge_case", "json", "p2o"]
+
+- name: jsonb_containment_operator
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT * FROM products WHERE attrs @> '{\"color\": \"red\"}'"
+  expected: "SELECT * FROM products WHERE JSON_EXISTS(attrs, '$.color?(@ == \"red\")')"
+  constructs: ["JSONB", "@>"]
+  tags: ["edge_case", "json", "p2o"]
+
+- name: jsonb_path_query_to_json_value
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT data #> '{address,city}' FROM contacts"
+  expected: "SELECT JSON_QUERY(data, '$.address.city') FROM contacts"
+  constructs: ["JSONB", "#>"]
+  tags: ["edge_case", "json", "p2o"]
+
+# ---------------------------------------------------------------------------
+# ARRAY WITH ANY/ALL
+# ---------------------------------------------------------------------------
+
+- name: array_any_to_member_of
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT * FROM tasks WHERE 'done' = ANY(statuses)"
+  expected: >-
+    SELECT * FROM tasks
+    WHERE 'done' IN (SELECT COLUMN_VALUE FROM TABLE(statuses))
+  constructs: ["ARRAY", "ANY"]
+  tags: ["edge_case", "array", "p2o"]
+
+- name: array_all_to_collection
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT * FROM tasks WHERE 100 > ALL(scores)"
+  expected: >-
+    SELECT * FROM tasks
+    WHERE 100 > (SELECT MAX(COLUMN_VALUE) FROM TABLE(scores))
+  constructs: ["ARRAY", "ALL"]
+  tags: ["edge_case", "array", "p2o"]
+
+# ---------------------------------------------------------------------------
+# SERIAL / IDENTITY IN FK
+# ---------------------------------------------------------------------------
+
+- name: serial_fk_to_sequence_trigger
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: >-
+    CREATE TABLE orders (id SERIAL PRIMARY KEY, customer_id INTEGER);
+    CREATE TABLE order_items (id SERIAL PRIMARY KEY, order_id INTEGER REFERENCES orders(id))
+  expected: >-
+    CREATE TABLE orders (id NUMBER(10) NOT NULL PRIMARY KEY, customer_id NUMBER(10));
+    CREATE SEQUENCE orders_id_seq START WITH 1;
+    CREATE OR REPLACE TRIGGER orders_id_trg BEFORE INSERT ON orders
+    FOR EACH ROW BEGIN :NEW.id := orders_id_seq.NEXTVAL; END;
+    CREATE TABLE order_items (id NUMBER(10) NOT NULL PRIMARY KEY, order_id NUMBER(10) REFERENCES orders(id));
+    CREATE SEQUENCE order_items_id_seq START WITH 1;
+    CREATE OR REPLACE TRIGGER order_items_id_trg BEFORE INSERT ON order_items
+    FOR EACH ROW BEGIN :NEW.id := order_items_id_seq.NEXTVAL; END;
+  complexity: 6
+  constructs: ["SERIAL", "FK", "REFERENCES"]
+  tags: ["edge_case", "serial", "p2o"]
+
+# ---------------------------------------------------------------------------
+# DEFAULT VALUES
+# ---------------------------------------------------------------------------
+
+- name: default_now_to_sysdate
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (created_at TIMESTAMP DEFAULT NOW())"
+  expected: "CREATE TABLE t (created_at TIMESTAMP DEFAULT SYSDATE)"
+  constructs: ["DEFAULT", "NOW"]
+  tags: ["edge_case", "default", "p2o"]
+
+- name: default_current_timestamp_to_systimestamp
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP)"
+  expected: "CREATE TABLE t (created_at TIMESTAMP WITH TIME ZONE DEFAULT SYSTIMESTAMP)"
+  constructs: ["DEFAULT", "CURRENT_TIMESTAMP"]
+  tags: ["edge_case", "default", "p2o"]
+
+- name: default_true_to_default_1
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (is_visible BOOLEAN DEFAULT TRUE)"
+  expected: "CREATE TABLE t (is_visible NUMBER(1) DEFAULT 1)"
+  constructs: ["DEFAULT", "BOOLEAN"]
+  tags: ["edge_case", "default", "boolean", "p2o"]
+
+# ---------------------------------------------------------------------------
+# INTERVAL CONVERSION
+# ---------------------------------------------------------------------------
+
+- name: interval_year_month_to_oracle_interval
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT created_at + INTERVAL '1 year 2 months' FROM subscriptions"
+  expected: "SELECT created_at + INTERVAL '14' MONTH FROM subscriptions"
+  constructs: ["INTERVAL"]
+  tags: ["edge_case", "interval", "p2o"]
+  acceptance_criteria:
+    - "PG allows mixed year-month interval"
+    - "Oracle requires conversion to months for INTERVAL MONTH"
+
+- name: interval_day_hour_to_oracle
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT ts + INTERVAL '2 days 3 hours' FROM events"
+  expected: "SELECT ts + INTERVAL '2 03:00:00' DAY TO SECOND FROM events"
+  constructs: ["INTERVAL"]
+  tags: ["edge_case", "interval", "p2o"]
+
+# ---------------------------------------------------------------------------
+# RECURSIVE CTE / CONNECT BY
+# ---------------------------------------------------------------------------
+
+- name: recursive_cte_to_connect_by
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: >-
+    WITH RECURSIVE tree AS (
+      SELECT id, parent_id, name FROM categories WHERE parent_id IS NULL
+      UNION ALL
+      SELECT c.id, c.parent_id, c.name FROM categories c JOIN tree t ON c.parent_id = t.id
+    )
+    SELECT * FROM tree
+  expected: >-
+    SELECT id, parent_id, name FROM categories
+    START WITH parent_id IS NULL
+    CONNECT BY PRIOR id = parent_id
+  complexity: 7
+  constructs: ["WITH RECURSIVE", "CTE"]
+  tags: ["edge_case", "recursive", "p2o"]
+
+- name: recursive_cte_cycle_detection
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: >-
+    WITH RECURSIVE tree AS (
+      SELECT id, parent_id, name, ARRAY[id] AS path FROM categories WHERE parent_id IS NULL
+      UNION ALL
+      SELECT c.id, c.parent_id, c.name, t.path || c.id
+      FROM categories c JOIN tree t ON c.parent_id = t.id
+      WHERE NOT c.id = ANY(t.path)
+    )
+    SELECT * FROM tree
+  expected: >-
+    SELECT id, parent_id, name, SYS_CONNECT_BY_PATH(id, '/') AS path
+    FROM categories
+    START WITH parent_id IS NULL
+    CONNECT BY NOCYCLE PRIOR id = parent_id
+  complexity: 8
+  constructs: ["WITH RECURSIVE", "CYCLE_DETECTION"]
+  tags: ["edge_case", "recursive", "p2o"]
+
+# ---------------------------------------------------------------------------
+# DISTINCT ON
+# ---------------------------------------------------------------------------
+
+- name: distinct_on_to_analytic
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: >-
+    SELECT DISTINCT ON (customer_id) customer_id, order_date, total
+    FROM orders ORDER BY customer_id, order_date DESC
+  expected: >-
+    SELECT customer_id, order_date, total FROM (
+      SELECT customer_id, order_date, total,
+             ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY order_date DESC) AS rn
+      FROM orders
+    ) WHERE rn = 1
+  complexity: 6
+  constructs: ["DISTINCT ON"]
+  tags: ["edge_case", "analytic", "p2o"]
+
+# ---------------------------------------------------------------------------
+# NULL HANDLING
+# ---------------------------------------------------------------------------
+
+- name: string_concat_null
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT first_name || ' ' || last_name FROM employees"
+  expected: "SELECT first_name || ' ' || last_name FROM employees"
+  constructs: ["CONCAT", "NULL"]
+  tags: ["edge_case", "null", "p2o"]
+  acceptance_criteria:
+    - "Oracle || with NULL returns NULL; PG || with NULL also returns NULL"
+    - "Behavior is the same in both databases for || operator"
+
+- name: nullif_same_syntax
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT NULLIF(score, 0) FROM tests"
+  expected: "SELECT NULLIF(score, 0) FROM tests"
+  constructs: ["NULLIF"]
+  tags: ["edge_case", "null", "p2o"]
+
+# ---------------------------------------------------------------------------
+# EXPLAIN / MAINTENANCE COMMANDS
+# ---------------------------------------------------------------------------
+
+- name: explain_analyze_to_explain_plan
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "EXPLAIN ANALYZE SELECT * FROM orders WHERE status = 'shipped'"
+  expected: >-
+    EXPLAIN PLAN FOR SELECT * FROM orders WHERE status = 'shipped';
+    SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY)
+  constructs: ["EXPLAIN ANALYZE"]
+  tags: ["edge_case", "explain", "p2o"]
+
+- name: create_index_concurrently_to_online
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "CREATE INDEX CONCURRENTLY idx_orders_status ON orders (status)"
+  expected: "CREATE INDEX idx_orders_status ON orders (status) ONLINE"
+  constructs: ["CREATE INDEX CONCURRENTLY"]
+  tags: ["edge_case", "index", "p2o"]
+
+- name: vacuum_to_segment_shrink
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "VACUUM FULL orders"
+  expected: >-
+    /* PG VACUUM FULL equivalent: Oracle segment shrink */
+    ALTER TABLE orders ENABLE ROW MOVEMENT;
+    ALTER TABLE orders SHRINK SPACE
+  constructs: ["VACUUM"]
+  tags: ["edge_case", "maintenance", "p2o"]
+
+# ---------------------------------------------------------------------------
+# PG-SPECIFIC FEATURES → ORACLE EQUIVALENTS
+# ---------------------------------------------------------------------------
+
+- name: listen_notify_to_dbms_aq
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: >-
+    LISTEN order_events;
+    NOTIFY order_events, 'new_order:1234'
+  expected: >-
+    /* LISTEN/NOTIFY maps to Oracle Advanced Queuing (DBMS_AQ) */
+    /* LLM-required: full AQ setup depends on payload structure */
+    EXEC DBMS_AQADM.CREATE_QUEUE_TABLE('order_events_qt', 'SYS.AQ$_JMS_TEXT_MESSAGE');
+    EXEC DBMS_AQADM.CREATE_QUEUE('order_events', 'order_events_qt');
+    EXEC DBMS_AQADM.START_QUEUE('order_events')
+  complexity: 9
+  constructs: ["LISTEN", "NOTIFY"]
+  tags: ["edge_case", "llm_required", "messaging", "p2o"]
+
+- name: row_level_security_to_vpd
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: >-
+    CREATE POLICY tenant_isolation ON orders
+    FOR ALL TO app_user
+    USING (tenant_id = current_setting('app.current_tenant')::INTEGER)
+  expected: >-
+    /* Row-Level Security maps to Oracle VPD (Virtual Private Database) */
+    /* LLM-required: VPD policy function must be manually crafted */
+    CREATE OR REPLACE FUNCTION tenant_policy(schema_name VARCHAR2, table_name VARCHAR2)
+    RETURN VARCHAR2 IS
+    BEGIN
+      RETURN 'tenant_id = SYS_CONTEXT(''app_ctx'', ''current_tenant'')';
+    END;
+    /
+    EXEC DBMS_RLS.ADD_POLICY('APP', 'ORDERS', 'TENANT_ISOLATION', 'APP', 'TENANT_POLICY')
+  complexity: 9
+  constructs: ["RLS", "POLICY"]
+  tags: ["edge_case", "llm_required", "security", "p2o"]
+
+- name: generated_column_to_virtual_column
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: >-
+    CREATE TABLE products (
+      price NUMERIC(10,2),
+      tax_rate NUMERIC(4,2),
+      total_price NUMERIC(10,2) GENERATED ALWAYS AS (price * (1 + tax_rate)) STORED
+    )
+  expected: >-
+    CREATE TABLE products (
+      price NUMBER(10,2),
+      tax_rate NUMBER(4,2),
+      total_price NUMBER(10,2) GENERATED ALWAYS AS (price * (1 + tax_rate)) VIRTUAL
+    )
+  constructs: ["GENERATED ALWAYS AS", "STORED"]
+  tags: ["edge_case", "generated_column", "p2o"]
+  acceptance_criteria:
+    - "PG STORED generated column maps to Oracle VIRTUAL column"
+    - "Oracle virtual columns are not physically stored (unlike PG STORED)"
+
+- name: exclusion_constraint_to_check_trigger
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: >-
+    CREATE TABLE reservations (
+      room_id INTEGER,
+      during TSTZRANGE,
+      EXCLUDE USING GIST (room_id WITH =, during WITH &&)
+    )
+  expected: >-
+    /* Exclusion constraints have no Oracle equivalent */
+    /* LLM-required: implement as CHECK + BEFORE INSERT/UPDATE trigger */
+    CREATE TABLE reservations (
+      room_id NUMBER(10),
+      during_start TIMESTAMP WITH TIME ZONE,
+      during_end TIMESTAMP WITH TIME ZONE
+    );
+    CREATE OR REPLACE TRIGGER reservations_no_overlap
+    BEFORE INSERT OR UPDATE ON reservations
+    FOR EACH ROW
+    DECLARE v_count NUMBER;
+    BEGIN
+      SELECT COUNT(*) INTO v_count FROM reservations
+      WHERE room_id = :NEW.room_id
+        AND during_start < :NEW.during_end
+        AND during_end > :NEW.during_start;
+      IF v_count > 0 THEN RAISE_APPLICATION_ERROR(-20001, 'Overlapping reservation'); END IF;
+    END;
+  complexity: 9
+  constructs: ["EXCLUDE", "GIST", "TSTZRANGE"]
+  tags: ["edge_case", "llm_required", "constraint", "p2o"]
+
+- name: foreign_table_fdw_to_db_link
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: >-
+    CREATE FOREIGN TABLE remote_customers (
+      id INTEGER, name VARCHAR(100)
+    ) SERVER remote_server
+    OPTIONS (schema_name 'public', table_name 'customers')
+  expected: >-
+    /* Foreign Data Wrapper maps to Oracle Database Link */
+    /* LLM-required: DB link configuration depends on remote server */
+    CREATE DATABASE LINK remote_server CONNECT TO remote_user
+    IDENTIFIED BY password USING 'remote_tns';
+    CREATE OR REPLACE VIEW remote_customers AS
+    SELECT id, name FROM customers@remote_server
+  complexity: 7
+  constructs: ["FOREIGN TABLE", "FDW"]
+  tags: ["edge_case", "llm_required", "federation", "p2o"]
+
+- name: mview_refresh_concurrently_to_refresh_force
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_sales_summary"
+  expected: >-
+    EXEC DBMS_MVIEW.REFRESH('mv_sales_summary', 'F')
+  constructs: ["REFRESH MATERIALIZED VIEW CONCURRENTLY"]
+  tags: ["edge_case", "mview", "p2o"]
+
+- name: do_block_to_anonymous_block
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: >-
+    DO $$
+    DECLARE
+      v_count INTEGER;
+    BEGIN
+      SELECT COUNT(*) INTO v_count FROM orders;
+      RAISE NOTICE 'Total orders: %', v_count;
+    END;
+    $$
+  expected: >-
+    DECLARE
+      v_count NUMBER;
+    BEGIN
+      SELECT COUNT(*) INTO v_count FROM orders;
+      DBMS_OUTPUT.PUT_LINE('Total orders: ' || v_count);
+    END;
+    /
+  constructs: ["DO", "DOLLAR_QUOTING", "RAISE NOTICE"]
+  tags: ["edge_case", "anonymous_block", "p2o"]
+
+- name: copy_command_to_sqlldr
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "\\copy orders TO '/tmp/orders.csv' WITH CSV HEADER"
+  expected: >-
+    /* \\copy maps to Oracle SQL*Loader or external table */
+    /* Conceptual mapping; no direct SQL equivalent */
+    CREATE TABLE orders_ext (
+      /* columns matching orders */
+    ) ORGANIZATION EXTERNAL (
+      TYPE ORACLE_LOADER
+      DEFAULT DIRECTORY data_dir
+      ACCESS PARAMETERS (
+        RECORDS DELIMITED BY NEWLINE
+        FIELDS TERMINATED BY ','
+        OPTIONALLY ENCLOSED BY '"'
+        MISSING FIELD VALUES ARE NULL
+      )
+      LOCATION ('orders.csv')
+    )
+  complexity: 5
+  constructs: ["COPY"]
+  tags: ["edge_case", "data_load", "p2o"]
+
+- name: extension_pg_trgm_to_manual
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: >-
+    CREATE EXTENSION pg_trgm;
+    SELECT * FROM products WHERE name % 'chair'
+  expected: >-
+    /* pg_trgm similarity maps to Oracle UTL_MATCH or CONTAINS */
+    SELECT * FROM products WHERE UTL_MATCH.JARO_WINKLER_SIMILARITY(name, 'chair') > 80
+  complexity: 6
+  constructs: ["EXTENSION", "pg_trgm"]
+  tags: ["edge_case", "llm_required", "extension", "p2o"]
+
+- name: advisory_lock_to_dbms_lock
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT pg_advisory_lock(12345)"
+  expected: >-
+    DECLARE v_handle VARCHAR2(128); v_status NUMBER;
+    BEGIN
+      DBMS_LOCK.ALLOCATE_UNIQUE('lock_12345', v_handle);
+      v_status := DBMS_LOCK.REQUEST(v_handle, DBMS_LOCK.X_MODE);
+    END;
+    /
+  complexity: 6
+  constructs: ["pg_advisory_lock"]
+  tags: ["edge_case", "locking", "p2o"]
+
+- name: tablespace_to_oracle_tablespace
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "CREATE TABLE orders (id INTEGER) TABLESPACE fast_storage"
+  expected: "CREATE TABLE orders (id NUMBER(10)) TABLESPACE fast_storage"
+  constructs: ["TABLESPACE"]
+  tags: ["edge_case", "tablespace", "p2o"]
+
+- name: savepoint_same_syntax
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: >-
+    SAVEPOINT sp1;
+    UPDATE orders SET status = 'pending';
+    ROLLBACK TO SAVEPOINT sp1
+  expected: >-
+    SAVEPOINT sp1;
+    UPDATE orders SET status = 'pending';
+    ROLLBACK TO SAVEPOINT sp1
+  constructs: ["SAVEPOINT"]
+  tags: ["edge_case", "transaction", "p2o"]
+
+- name: copy_from_to_external_table
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "COPY orders FROM '/tmp/orders.csv' WITH CSV HEADER"
+  expected: >-
+    /* COPY FROM maps to Oracle external table for loading */
+    CREATE TABLE orders_ext_load (
+      /* columns matching orders */
+    ) ORGANIZATION EXTERNAL (
+      TYPE ORACLE_LOADER
+      DEFAULT DIRECTORY data_dir
+      ACCESS PARAMETERS (
+        RECORDS DELIMITED BY NEWLINE
+        SKIP 1
+        FIELDS TERMINATED BY ','
+      )
+      LOCATION ('orders.csv')
+    );
+    INSERT INTO orders SELECT * FROM orders_ext_load
+  complexity: 5
+  constructs: ["COPY FROM"]
+  tags: ["edge_case", "data_load", "p2o"]
+
+- name: pg_dump_to_data_pump
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "/* pg_dump -Fc mydb > backup.dump */"
+  expected: >-
+    /* pg_dump maps to Oracle Data Pump (expdp) */
+    /* expdp system/password DIRECTORY=dpump_dir DUMPFILE=backup.dmp SCHEMAS=myschema */
+  constructs: ["pg_dump"]
+  tags: ["edge_case", "conceptual", "backup", "p2o"]
+
+- name: schema_ownership_to_oracle_schema
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "ALTER SCHEMA sales OWNER TO sales_admin"
+  expected: >-
+    /* Oracle schemas are tied to users; no separate ownership transfer */
+    /* The Oracle user IS the schema owner */
+    /* Ensure sales_admin user has proper privileges on sales schema objects */
+    GRANT ALL PRIVILEGES ON sales.* TO sales_admin
+  constructs: ["ALTER SCHEMA", "OWNER"]
+  tags: ["edge_case", "schema", "p2o"]
+
+# ---------------------------------------------------------------------------
+# ADDITIONAL EDGE CASES — OPERATORS & SYNTAX
+# ---------------------------------------------------------------------------
+
+- name: ilike_to_upper_like
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT * FROM products WHERE name ILIKE '%widget%'"
+  expected: "SELECT * FROM products WHERE UPPER(name) LIKE UPPER('%widget%')"
+  constructs: ["ILIKE"]
+  tags: ["edge_case", "string", "p2o"]
+
+- name: similar_to_regex
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT * FROM users WHERE email SIMILAR TO '%@(gmail|yahoo)\\.com'"
+  expected: "SELECT * FROM users WHERE REGEXP_LIKE(email, '@(gmail|yahoo)\\.com$')"
+  constructs: ["SIMILAR TO"]
+  tags: ["edge_case", "regex", "p2o"]
+
+- name: posix_regex_to_regexp_like
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT * FROM logs WHERE message ~ '^ERROR:'"
+  expected: "SELECT * FROM logs WHERE REGEXP_LIKE(message, '^ERROR:')"
+  constructs: ["~"]
+  tags: ["edge_case", "regex", "p2o"]
+
+- name: posix_regex_negated
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT * FROM logs WHERE message !~ '^DEBUG:'"
+  expected: "SELECT * FROM logs WHERE NOT REGEXP_LIKE(message, '^DEBUG:')"
+  constructs: ["!~"]
+  tags: ["edge_case", "regex", "p2o"]
+
+- name: posix_regex_case_insensitive
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT * FROM logs WHERE message ~* 'error'"
+  expected: "SELECT * FROM logs WHERE REGEXP_LIKE(message, 'error', 'i')"
+  constructs: ["~*"]
+  tags: ["edge_case", "regex", "p2o"]
+
+- name: string_agg_to_listagg
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT dept_id, STRING_AGG(name, ', ' ORDER BY name) FROM employees GROUP BY dept_id"
+  expected: "SELECT dept_id, LISTAGG(name, ', ') WITHIN GROUP (ORDER BY name) FROM employees GROUP BY dept_id"
+  constructs: ["STRING_AGG"]
+  tags: ["edge_case", "aggregate", "p2o"]
+
+- name: array_agg_to_collect
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT dept_id, ARRAY_AGG(name ORDER BY name) FROM employees GROUP BY dept_id"
+  expected: "SELECT dept_id, CAST(COLLECT(name ORDER BY name) AS SYS.ODCIVARCHAR2LIST) FROM employees GROUP BY dept_id"
+  constructs: ["ARRAY_AGG"]
+  tags: ["edge_case", "aggregate", "p2o"]
+
+- name: generate_series_to_connect_by
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT generate_series(1, 10) AS n"
+  expected: "SELECT LEVEL AS n FROM DUAL CONNECT BY LEVEL <= 10"
+  constructs: ["generate_series"]
+  tags: ["edge_case", "rowgen", "p2o"]
+
+- name: generate_series_date_range
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: >-
+    SELECT d::DATE FROM generate_series('2024-01-01'::DATE, '2024-12-31'::DATE, '1 month'::INTERVAL) AS d
+  expected: >-
+    SELECT ADD_MONTHS(DATE '2024-01-01', LEVEL - 1) AS d FROM DUAL
+    CONNECT BY ADD_MONTHS(DATE '2024-01-01', LEVEL - 1) <= DATE '2024-12-31'
+  constructs: ["generate_series", "DATE"]
+  tags: ["edge_case", "rowgen", "date", "p2o"]
+
+- name: returning_clause
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "INSERT INTO orders (product, qty) VALUES ('Widget', 5) RETURNING id, created_at"
+  expected: >-
+    INSERT INTO orders (product, qty) VALUES ('Widget', 5)
+    RETURNING id, created_at INTO v_id, v_created_at
+  constructs: ["RETURNING"]
+  tags: ["edge_case", "dml", "p2o"]
+  acceptance_criteria:
+    - "PG RETURNING returns a result set"
+    - "Oracle RETURNING ... INTO requires bind variables (PL/SQL context)"
+
+- name: on_conflict_to_merge
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: >-
+    INSERT INTO products (sku, name, price)
+    VALUES ('W001', 'Widget', 9.99)
+    ON CONFLICT (sku) DO UPDATE SET name = EXCLUDED.name, price = EXCLUDED.price
+  expected: >-
+    MERGE INTO products p
+    USING (SELECT 'W001' AS sku, 'Widget' AS name, 9.99 AS price FROM DUAL) s
+    ON (p.sku = s.sku)
+    WHEN MATCHED THEN UPDATE SET p.name = s.name, p.price = s.price
+    WHEN NOT MATCHED THEN INSERT (sku, name, price) VALUES (s.sku, s.name, s.price)
+  complexity: 6
+  constructs: ["ON CONFLICT", "UPSERT"]
+  tags: ["edge_case", "dml", "p2o"]
+
+- name: on_conflict_do_nothing
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "INSERT INTO tags (name) VALUES ('sql') ON CONFLICT DO NOTHING"
+  expected: >-
+    MERGE INTO tags t
+    USING (SELECT 'sql' AS name FROM DUAL) s
+    ON (t.name = s.name)
+    WHEN NOT MATCHED THEN INSERT (name) VALUES (s.name)
+  complexity: 5
+  constructs: ["ON CONFLICT DO NOTHING"]
+  tags: ["edge_case", "dml", "p2o"]
+
+- name: lateral_join_to_lateral
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: >-
+    SELECT d.name, l.recent_order FROM departments d,
+    LATERAL (SELECT MAX(order_date) AS recent_order FROM orders WHERE dept_id = d.id) l
+  expected: >-
+    SELECT d.name, l.recent_order FROM departments d,
+    LATERAL (SELECT MAX(order_date) AS recent_order FROM orders WHERE dept_id = d.id) l
+  constructs: ["LATERAL"]
+  tags: ["edge_case", "join", "p2o"]
+  acceptance_criteria:
+    - "Oracle 12c+ supports LATERAL inline views natively"
+
+- name: filter_clause_to_case
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: >-
+    SELECT
+      COUNT(*) FILTER (WHERE status = 'active') AS active_count,
+      COUNT(*) FILTER (WHERE status = 'inactive') AS inactive_count
+    FROM users
+  expected: >-
+    SELECT
+      COUNT(CASE WHEN status = 'active' THEN 1 END) AS active_count,
+      COUNT(CASE WHEN status = 'inactive' THEN 1 END) AS inactive_count
+    FROM users
+  constructs: ["FILTER"]
+  tags: ["edge_case", "aggregate", "p2o"]
+
+- name: limit_offset_to_fetch
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT * FROM products ORDER BY price DESC LIMIT 10 OFFSET 20"
+  expected: "SELECT * FROM products ORDER BY price DESC OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY"
+  constructs: ["LIMIT", "OFFSET"]
+  tags: ["edge_case", "pagination", "p2o"]
+
+- name: for_update_skip_locked
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT * FROM jobs WHERE status = 'pending' ORDER BY priority LIMIT 1 FOR UPDATE SKIP LOCKED"
+  expected: >-
+    SELECT * FROM jobs WHERE status = 'pending' ORDER BY priority
+    FETCH FIRST 1 ROWS ONLY FOR UPDATE SKIP LOCKED
+  constructs: ["FOR UPDATE SKIP LOCKED", "LIMIT"]
+  tags: ["edge_case", "locking", "p2o"]
+  acceptance_criteria:
+    - "Oracle supports FOR UPDATE SKIP LOCKED natively"
+
+- name: crosstab_to_pivot
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: >-
+    SELECT * FROM crosstab(
+      'SELECT dept, quarter, revenue FROM sales ORDER BY 1,2',
+      'SELECT DISTINCT quarter FROM sales ORDER BY 1'
+    ) AS ct(dept TEXT, q1 NUMERIC, q2 NUMERIC, q3 NUMERIC, q4 NUMERIC)
+  expected: >-
+    SELECT * FROM (SELECT dept, quarter, revenue FROM sales)
+    PIVOT (SUM(revenue) FOR quarter IN ('Q1' AS q1, 'Q2' AS q2, 'Q3' AS q3, 'Q4' AS q4))
+  complexity: 7
+  constructs: ["crosstab", "PIVOT"]
+  tags: ["edge_case", "pivot", "p2o"]
+
+- name: unnest_with_ordinality
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT val, ord FROM unnest(ARRAY['a','b','c']) WITH ORDINALITY AS t(val, ord)"
+  expected: >-
+    SELECT COLUMN_VALUE AS val, ROWNUM AS ord
+    FROM TABLE(SYS.ODCIVARCHAR2LIST('a','b','c'))
+  constructs: ["unnest", "WITH ORDINALITY"]
+  tags: ["edge_case", "array", "p2o"]
+
+- name: values_as_table
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT * FROM (VALUES (1, 'a'), (2, 'b'), (3, 'c')) AS t(id, code)"
+  expected: >-
+    SELECT 1 AS id, 'a' AS code FROM DUAL UNION ALL
+    SELECT 2, 'b' FROM DUAL UNION ALL
+    SELECT 3, 'c' FROM DUAL
+  constructs: ["VALUES"]
+  tags: ["edge_case", "values", "p2o"]
+
+- name: tablesample_to_sample
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT * FROM orders TABLESAMPLE BERNOULLI (10)"
+  expected: "SELECT * FROM orders SAMPLE (10)"
+  constructs: ["TABLESAMPLE"]
+  tags: ["edge_case", "sampling", "p2o"]
+
+- name: grouping_sets
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: >-
+    SELECT region, product, SUM(sales)
+    FROM orders GROUP BY GROUPING SETS ((region), (product), ())
+  expected: >-
+    SELECT region, product, SUM(sales)
+    FROM orders GROUP BY GROUPING SETS ((region), (product), ())
+  constructs: ["GROUPING SETS"]
+  tags: ["edge_case", "aggregate", "p2o"]
+  acceptance_criteria:
+    - "Oracle supports GROUPING SETS natively"
+
+- name: cube_same_syntax
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT region, product, SUM(sales) FROM orders GROUP BY CUBE (region, product)"
+  expected: "SELECT region, product, SUM(sales) FROM orders GROUP BY CUBE (region, product)"
+  constructs: ["CUBE"]
+  tags: ["edge_case", "aggregate", "p2o"]
+
+- name: rollup_same_syntax
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT region, product, SUM(sales) FROM orders GROUP BY ROLLUP (region, product)"
+  expected: "SELECT region, product, SUM(sales) FROM orders GROUP BY ROLLUP (region, product)"
+  constructs: ["ROLLUP"]
+  tags: ["edge_case", "aggregate", "p2o"]
+
+- name: window_frame_groups
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: >-
+    SELECT id, amount,
+           SUM(amount) OVER (ORDER BY id GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS grp_sum
+    FROM transactions
+  expected: >-
+    SELECT id, amount,
+           SUM(amount) OVER (ORDER BY id GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS grp_sum
+    FROM transactions
+  constructs: ["WINDOW FRAME GROUPS"]
+  tags: ["edge_case", "window", "p2o"]
+  acceptance_criteria:
+    - "Oracle 21c+ supports GROUPS frame clause"
+
+- name: current_date_to_trunc_sysdate
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT * FROM orders WHERE order_date = CURRENT_DATE"
+  expected: "SELECT * FROM orders WHERE order_date = TRUNC(SYSDATE)"
+  constructs: ["CURRENT_DATE"]
+  tags: ["edge_case", "datetime", "p2o"]
+
+- name: pg_typeof_to_dump
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT pg_typeof(123.45)"
+  expected: "SELECT DUMP(123.45) FROM DUAL"
+  constructs: ["pg_typeof"]
+  tags: ["edge_case", "introspection", "p2o"]
+
+- name: information_schema_to_all_tables
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"
+  expected: "SELECT table_name FROM all_tables WHERE owner = USER"
+  constructs: ["information_schema"]
+  tags: ["edge_case", "catalog", "p2o"]
+
+- name: pg_catalog_pg_class_to_dba_objects
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "SELECT relname, relkind FROM pg_catalog.pg_class WHERE relnamespace = 'public'::regnamespace"
+  expected: "SELECT object_name, object_type FROM dba_objects WHERE owner = USER"
+  constructs: ["pg_catalog"]
+  tags: ["edge_case", "catalog", "p2o"]
+
+- name: create_temp_table_as_select
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "CREATE TEMP TABLE top_customers AS SELECT customer_id, SUM(total) AS lifetime FROM orders GROUP BY customer_id"
+  expected: >-
+    CREATE GLOBAL TEMPORARY TABLE top_customers ON COMMIT PRESERVE ROWS AS
+    SELECT customer_id, SUM(total) AS lifetime FROM orders GROUP BY customer_id
+  constructs: ["CREATE TEMP TABLE AS"]
+  tags: ["edge_case", "temporary", "p2o"]
+
+- name: alter_table_add_column_if_not_exists
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "ALTER TABLE orders ADD COLUMN IF NOT EXISTS notes TEXT"
+  expected: >-
+    BEGIN
+      EXECUTE IMMEDIATE 'ALTER TABLE orders ADD (notes CLOB)';
+    EXCEPTION WHEN OTHERS THEN
+      IF SQLCODE != -1430 THEN RAISE; END IF;
+    END;
+    /
+  constructs: ["ALTER TABLE", "IF NOT EXISTS"]
+  tags: ["edge_case", "ddl", "p2o"]
+
+- name: drop_table_if_exists_cascade
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "DROP TABLE IF EXISTS temp_results CASCADE"
+  expected: >-
+    BEGIN
+      EXECUTE IMMEDIATE 'DROP TABLE temp_results CASCADE CONSTRAINTS';
+    EXCEPTION WHEN OTHERS THEN
+      IF SQLCODE != -942 THEN RAISE; END IF;
+    END;
+    /
+  constructs: ["DROP TABLE", "IF EXISTS", "CASCADE"]
+  tags: ["edge_case", "ddl", "p2o"]
+
+- name: truncate_cascade
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "TRUNCATE TABLE orders CASCADE"
+  expected: >-
+    /* Oracle TRUNCATE does not support CASCADE; must truncate children first */
+    TRUNCATE TABLE order_items;
+    TRUNCATE TABLE orders
+  complexity: 5
+  constructs: ["TRUNCATE", "CASCADE"]
+  tags: ["edge_case", "dml", "p2o"]
+
+- name: comment_on_column
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "COMMENT ON COLUMN orders.status IS 'Current order status: pending, shipped, delivered'"
+  expected: "COMMENT ON COLUMN orders.status IS 'Current order status: pending, shipped, delivered'"
+  constructs: ["COMMENT ON COLUMN"]
+  tags: ["edge_case", "metadata", "p2o"]
+  acceptance_criteria:
+    - "COMMENT ON syntax is the same in both databases"
+
+- name: comment_on_table
+  category: p2o_edge_cases
+  direction: pg_to_oracle
+  source: "COMMENT ON TABLE orders IS 'Customer order records'"
+  expected: "COMMENT ON TABLE orders IS 'Customer order records'"
+  constructs: ["COMMENT ON TABLE"]
+  tags: ["edge_case", "metadata", "p2o"]

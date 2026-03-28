@@ -1,0 +1,110 @@
+# =============================================================================
+# SteinDB Golden Tests — P2O Date/Time Syntax Conversions
+# PostgreSQL date/time expressions → Oracle equivalents
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# TIMESTAMP FUNCTIONS
+# ---------------------------------------------------------------------------
+
+- name: current_timestamp_to_sysdate
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT CURRENT_TIMESTAMP"
+  expected: "SELECT SYSDATE FROM DUAL"
+  constructs: ["CURRENT_TIMESTAMP"]
+  tags: ["datetime", "p2o"]
+
+- name: clock_timestamp_to_systimestamp
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT clock_timestamp()"
+  expected: "SELECT SYSTIMESTAMP FROM DUAL"
+  constructs: ["clock_timestamp"]
+  tags: ["datetime", "p2o"]
+  acceptance_criteria:
+    - "PG clock_timestamp() returns wall-clock time (changes during statement)"
+    - "Oracle SYSTIMESTAMP is the closest equivalent"
+
+# ---------------------------------------------------------------------------
+# DATE ARITHMETIC
+# ---------------------------------------------------------------------------
+
+- name: date_plus_interval_day_to_addition
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT order_date + INTERVAL '1 day' FROM orders"
+  expected: "SELECT order_date + 1 FROM orders"
+  constructs: ["INTERVAL"]
+  tags: ["datetime", "arithmetic", "p2o"]
+
+- name: date_trunc_day_to_trunc
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT DATE_TRUNC('day', created_at) FROM events"
+  expected: "SELECT TRUNC(created_at) FROM events"
+  constructs: ["DATE_TRUNC"]
+  tags: ["datetime", "truncation", "p2o"]
+
+- name: date_trunc_month_to_trunc_mm
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT DATE_TRUNC('month', created_at) FROM events"
+  expected: "SELECT TRUNC(created_at, 'MM') FROM events"
+  constructs: ["DATE_TRUNC"]
+  tags: ["datetime", "truncation", "p2o"]
+
+- name: interval_months_cast_to_add_months
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT start_date + (num_months || ' months')::INTERVAL FROM subscriptions"
+  expected: "SELECT ADD_MONTHS(start_date, num_months) FROM subscriptions"
+  constructs: ["INTERVAL", "CAST"]
+  tags: ["datetime", "arithmetic", "p2o"]
+
+# ---------------------------------------------------------------------------
+# EPOCH / SPECIAL
+# ---------------------------------------------------------------------------
+
+- name: extract_epoch_to_interval_arithmetic
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT EXTRACT(EPOCH FROM (end_time - start_time)) FROM tasks"
+  expected: >-
+    SELECT (CAST(end_time AS DATE) - CAST(start_time AS DATE)) * 86400
+    FROM tasks
+  constructs: ["EXTRACT", "EPOCH"]
+  tags: ["datetime", "epoch", "p2o"]
+  acceptance_criteria:
+    - "PG EXTRACT(EPOCH FROM interval) returns total seconds"
+    - "Oracle date subtraction returns days; multiply by 86400 for seconds"
+
+- name: current_date_to_trunc_sysdate
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT CURRENT_DATE"
+  expected: "SELECT TRUNC(SYSDATE) FROM DUAL"
+  constructs: ["CURRENT_DATE"]
+  tags: ["datetime", "p2o"]
+  acceptance_criteria:
+    - "PG CURRENT_DATE has no time component"
+    - "Oracle SYSDATE includes time; TRUNC removes it"
+
+- name: localtimestamp_to_sysdate
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT LOCALTIMESTAMP"
+  expected: "SELECT SYSDATE FROM DUAL"
+  constructs: ["LOCALTIMESTAMP"]
+  tags: ["datetime", "p2o"]
+
+- name: make_interval_to_interval_literal
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT make_interval(months => 3)"
+  expected: "SELECT INTERVAL '3' MONTH FROM DUAL"
+  constructs: ["make_interval"]
+  tags: ["datetime", "interval", "p2o"]
+  acceptance_criteria:
+    - "PG make_interval() has named parameters for flexible interval creation"
+    - "Oracle uses INTERVAL literal syntax"

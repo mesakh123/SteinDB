@@ -1,0 +1,148 @@
+# Oracle (+) outer join syntax → PostgreSQL explicit JOIN syntax
+# Reference: CYBERTEC Oracle-to-PostgreSQL migration guide
+
+- name: simple_plus_right_outer_join
+  category: syntax
+  oracle: "SELECT b.col1, a.col2 FROM base_table b, attributes a WHERE b.id = a.b_id(+)"
+  expected_postgresql: "SELECT b.col1, a.col2 FROM base_table b LEFT JOIN attributes a ON b.id = a.b_id"
+  complexity: 3
+  constructs: ["OUTER_JOIN_PLUS"]
+  tags: ["cybertec", "joins"]
+
+- name: plus_both_sides_full_outer
+  category: syntax
+  oracle: "SELECT a.name, b.value FROM table_a a, table_b b WHERE a.id(+) = b.a_id(+)"
+  expected_postgresql: "SELECT a.name, b.value FROM table_a a FULL OUTER JOIN table_b b ON a.id = b.a_id"
+  complexity: 4
+  constructs: ["OUTER_JOIN_PLUS"]
+  tags: ["cybertec", "joins"]
+
+- name: multiple_plus_joins_one_query
+  category: syntax
+  oracle: >
+    SELECT e.name, d.dept_name, l.city
+    FROM employees e, departments d, locations l
+    WHERE e.dept_id = d.id(+)
+    AND d.location_id = l.id(+)
+  expected_postgresql: >
+    SELECT e.name, d.dept_name, l.city
+    FROM employees e
+    LEFT JOIN departments d ON e.dept_id = d.id
+    LEFT JOIN locations l ON d.location_id = l.id
+  complexity: 5
+  constructs: ["OUTER_JOIN_PLUS"]
+  tags: ["cybertec", "joins"]
+
+- name: plus_with_and_conditions
+  category: syntax
+  oracle: >
+    SELECT e.name, d.dept_name
+    FROM employees e, departments d
+    WHERE e.dept_id = d.id(+)
+    AND d.active(+) = 'Y'
+  expected_postgresql: >
+    SELECT e.name, d.dept_name
+    FROM employees e
+    LEFT JOIN departments d ON e.dept_id = d.id AND d.active = 'Y'
+  complexity: 5
+  constructs: ["OUTER_JOIN_PLUS"]
+  tags: ["cybertec", "joins"]
+
+- name: plus_with_or_conditions
+  category: syntax
+  oracle: >
+    SELECT a.id, b.value
+    FROM table_a a, table_b b
+    WHERE a.id = b.a_id(+)
+    AND (b.type(+) = 'X' OR b.type(+) = 'Y')
+  expected_postgresql: >
+    SELECT a.id, b.value
+    FROM table_a a
+    LEFT JOIN table_b b ON a.id = b.a_id AND (b.type = 'X' OR b.type = 'Y')
+  complexity: 6
+  constructs: ["OUTER_JOIN_PLUS"]
+  tags: ["cybertec", "joins"]
+
+- name: nested_plus_joins
+  category: syntax
+  oracle: >
+    SELECT a.id, b.val, c.descr
+    FROM t_a a, t_b b, t_c c
+    WHERE a.id = b.a_id(+)
+    AND b.id = c.b_id(+)
+    AND c.status(+) = 'ACTIVE'
+  expected_postgresql: >
+    SELECT a.id, b.val, c.descr
+    FROM t_a a
+    LEFT JOIN t_b b ON a.id = b.a_id
+    LEFT JOIN t_c c ON b.id = c.b_id AND c.status = 'ACTIVE'
+  complexity: 6
+  constructs: ["OUTER_JOIN_PLUS"]
+  tags: ["cybertec", "joins"]
+
+- name: self_join_with_plus
+  category: syntax
+  oracle: >
+    SELECT e.name AS employee, m.name AS manager
+    FROM employees e, employees m
+    WHERE e.manager_id = m.id(+)
+  expected_postgresql: >
+    SELECT e.name AS employee, m.name AS manager
+    FROM employees e
+    LEFT JOIN employees m ON e.manager_id = m.id
+  complexity: 4
+  constructs: ["OUTER_JOIN_PLUS"]
+  tags: ["cybertec", "joins"]
+
+- name: plus_in_subquery
+  category: syntax
+  oracle: >
+    SELECT * FROM (
+      SELECT e.name, d.dept_name
+      FROM employees e, departments d
+      WHERE e.dept_id = d.id(+)
+    ) sub WHERE sub.dept_name IS NOT NULL
+  expected_postgresql: >
+    SELECT * FROM (
+      SELECT e.name, d.dept_name
+      FROM employees e
+      LEFT JOIN departments d ON e.dept_id = d.id
+    ) AS sub WHERE sub.dept_name IS NOT NULL
+  complexity: 6
+  constructs: ["OUTER_JOIN_PLUS"]
+  tags: ["cybertec", "joins", "subselect"]
+
+- name: complex_multi_table_plus_join
+  category: syntax
+  oracle: >
+    SELECT o.order_id, c.name, p.product_name, s.ship_date
+    FROM orders o, customers c, products p, shipments s
+    WHERE o.customer_id = c.id(+)
+    AND o.product_id = p.id(+)
+    AND o.id = s.order_id(+)
+    AND s.status(+) = 'SHIPPED'
+  expected_postgresql: >
+    SELECT o.order_id, c.name, p.product_name, s.ship_date
+    FROM orders o
+    LEFT JOIN customers c ON o.customer_id = c.id
+    LEFT JOIN products p ON o.product_id = p.id
+    LEFT JOIN shipments s ON o.id = s.order_id AND s.status = 'SHIPPED'
+  complexity: 7
+  constructs: ["OUTER_JOIN_PLUS"]
+  tags: ["cybertec", "joins"]
+
+- name: mixed_plus_and_standard_joins
+  category: syntax
+  oracle: >
+    SELECT e.name, d.dept_name, l.city
+    FROM employees e, departments d, locations l
+    WHERE e.dept_id = d.id
+    AND d.location_id = l.id(+)
+  expected_postgresql: >
+    SELECT e.name, d.dept_name, l.city
+    FROM employees e
+    INNER JOIN departments d ON e.dept_id = d.id
+    LEFT JOIN locations l ON d.location_id = l.id
+  complexity: 5
+  constructs: ["OUTER_JOIN_PLUS"]
+  tags: ["cybertec", "joins"]

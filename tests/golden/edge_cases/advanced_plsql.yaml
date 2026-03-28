@@ -1,0 +1,174 @@
+# =============================================================================
+# SteinDB Golden Tests — Advanced PL/SQL Edge Cases
+# From issues.md Section 4: Autonomous transactions, bulk processing, synonyms
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# AUTONOMOUS TRANSACTION → dblink WORKAROUND
+# ---------------------------------------------------------------------------
+
+- name: autonomous_transaction_logging
+  category: edge_cases
+  oracle: >-
+    CREATE OR REPLACE PROCEDURE log_error(p_msg VARCHAR2) IS
+      PRAGMA AUTONOMOUS_TRANSACTION;
+    BEGIN
+      INSERT INTO error_log (message, log_time) VALUES (p_msg, SYSDATE);
+      COMMIT;
+    END;
+  expected_postgresql: >-
+    CREATE OR REPLACE FUNCTION log_error(p_msg VARCHAR)
+    RETURNS VOID AS $$
+    BEGIN
+      PERFORM dblink_exec('dbname=' || current_database(),
+        'INSERT INTO error_log (message, log_time) VALUES (' ||
+        quote_literal(p_msg) || ', CURRENT_TIMESTAMP)');
+    END;
+    $$ LANGUAGE plpgsql
+  complexity: 8
+  constructs: ["AUTONOMOUS_TRANSACTION", "PRAGMA", "DBLINK"]
+  tags: ["advanced_plsql", "autonomous", "section4"]
+  acceptance_criteria:
+    - "Oracle PRAGMA AUTONOMOUS_TRANSACTION has no native PG equivalent"
+    - "dblink opens a separate connection to commit independently"
+    - "WARNING: requires dblink extension installed"
+    - "Alternative: pg_background extension or background worker"
+
+# ---------------------------------------------------------------------------
+# BULK COLLECT → ARRAY OPERATIONS
+# ---------------------------------------------------------------------------
+
+- name: bulk_collect_to_array
+  category: edge_cases
+  oracle: >-
+    DECLARE
+      TYPE t_ids IS TABLE OF NUMBER;
+      v_ids t_ids;
+    BEGIN
+      SELECT employee_id BULK COLLECT INTO v_ids
+      FROM employees WHERE department_id = 10;
+    END;
+  expected_postgresql: >-
+    DO $$
+    DECLARE
+      v_ids INTEGER[];
+    BEGIN
+      SELECT ARRAY_AGG(employee_id) INTO v_ids
+      FROM employees WHERE department_id = 10;
+    END;
+    $$
+  complexity: 6
+  constructs: ["BULK_COLLECT", "ARRAY_AGG", "TABLE_OF"]
+  tags: ["advanced_plsql", "bulk_processing", "section4"]
+  acceptance_criteria:
+    - "Oracle BULK COLLECT maps to PG ARRAY_AGG"
+    - "Oracle TABLE OF type maps to PG array type"
+    - "Row-by-row emulation would destroy performance"
+
+- name: forall_to_unnest
+  category: edge_cases
+  oracle: >-
+    DECLARE
+      TYPE t_ids IS TABLE OF NUMBER;
+      v_ids t_ids := t_ids(1, 2, 3, 4, 5);
+    BEGIN
+      FORALL i IN 1..v_ids.COUNT
+        DELETE FROM employees WHERE id = v_ids(i);
+    END;
+  expected_postgresql: >-
+    DO $$
+    DECLARE
+      v_ids INTEGER[] := ARRAY[1, 2, 3, 4, 5];
+    BEGIN
+      DELETE FROM employees WHERE id = ANY(v_ids);
+    END;
+    $$
+  complexity: 6
+  constructs: ["FORALL", "BULK_PROCESSING", "ANY_ARRAY"]
+  tags: ["advanced_plsql", "bulk_processing", "section4"]
+  acceptance_criteria:
+    - "Oracle FORALL for batch DML maps to PG set-based operations"
+    - "Use ANY(array) for IN-list operations from arrays"
+    - "Never emulate FORALL with row-by-row loops in PG"
+
+# ---------------------------------------------------------------------------
+# SYNONYMS → search_path / VIEWS
+# ---------------------------------------------------------------------------
+
+- name: public_synonym_to_search_path
+  category: edge_cases
+  oracle: "CREATE PUBLIC SYNONYM emp FOR hr.employees"
+  expected_postgresql: "SET search_path TO hr, public"
+  complexity: 4
+  constructs: ["SYNONYM", "SEARCH_PATH"]
+  tags: ["advanced_plsql", "synonyms", "section2"]
+  acceptance_criteria:
+    - "Oracle public synonyms have no PG equivalent"
+    - "Set search_path to include the target schema"
+    - "Alternative: CREATE VIEW emp AS SELECT * FROM hr.employees"
+
+- name: private_synonym_to_view
+  category: edge_cases
+  oracle: "CREATE SYNONYM my_orders FOR sales.orders"
+  expected_postgresql: "CREATE VIEW my_orders AS SELECT * FROM sales.orders"
+  complexity: 3
+  constructs: ["SYNONYM", "VIEW"]
+  tags: ["advanced_plsql", "synonyms", "section2"]
+  acceptance_criteria:
+    - "Private synonym maps to a view as pseudo-synonym"
+    - "View provides same namespace resolution"
+
+# ---------------------------------------------------------------------------
+# PACKAGES → SCHEMA-QUALIFIED FUNCTIONS
+# ---------------------------------------------------------------------------
+
+- name: package_function_to_schema_function
+  category: edge_cases
+  oracle: >-
+    CREATE OR REPLACE PACKAGE BODY pkg_utils AS
+      FUNCTION format_name(p_first VARCHAR2, p_last VARCHAR2) RETURN VARCHAR2 IS
+      BEGIN
+        RETURN p_last || ', ' || p_first;
+      END;
+    END pkg_utils;
+  expected_postgresql: >-
+    CREATE OR REPLACE FUNCTION pkg_utils.format_name(p_first VARCHAR, p_last VARCHAR)
+    RETURNS VARCHAR AS $$
+    BEGIN
+      RETURN p_last || ', ' || p_first;
+    END;
+    $$ LANGUAGE plpgsql
+  complexity: 5
+  constructs: ["PACKAGE_BODY", "FUNCTION"]
+  tags: ["advanced_plsql", "packages", "section2"]
+  acceptance_criteria:
+    - "Oracle package body functions map to PG schema-qualified functions"
+    - "Package name becomes schema name: pkg_utils.format_name()"
+    - "Must CREATE SCHEMA pkg_utils first"
+
+- name: sequence_currval_nextval
+  category: edge_cases
+  oracle: "SELECT my_seq.NEXTVAL, my_seq.CURRVAL FROM DUAL"
+  expected_postgresql: "SELECT nextval('my_seq'), currval('my_seq')"
+  complexity: 2
+  constructs: ["SEQUENCE", "NEXTVAL", "CURRVAL", "DUAL"]
+  tags: ["advanced_plsql", "sequences", "section3"]
+  acceptance_criteria:
+    - "Oracle dot notation seq.NEXTVAL becomes PG function nextval('seq')"
+
+- name: rownum_pagination
+  category: edge_cases
+  oracle: >-
+    SELECT * FROM (
+      SELECT a.*, ROWNUM rnum FROM (
+        SELECT * FROM employees ORDER BY salary DESC
+      ) a WHERE ROWNUM <= 20
+    ) WHERE rnum > 10
+  expected_postgresql: >-
+    SELECT * FROM employees ORDER BY salary DESC LIMIT 10 OFFSET 10
+  complexity: 5
+  constructs: ["ROWNUM", "PAGINATION"]
+  tags: ["advanced_plsql", "pagination", "section3"]
+  acceptance_criteria:
+    - "Oracle ROWNUM pagination pattern maps to PG LIMIT/OFFSET"
+    - "Nested subquery with ROWNUM is the classic Oracle pagination"

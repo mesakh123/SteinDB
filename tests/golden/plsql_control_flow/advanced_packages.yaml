@@ -1,0 +1,368 @@
+# =============================================================================
+# SteinDB Golden Tests — Advanced PL/SQL Package Patterns (O2P)
+# Real-world PL/SQL patterns from enterprise environments
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Package with initialization block
+# ---------------------------------------------------------------------------
+
+- name: package_initialization_block
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PACKAGE BODY config_pkg IS
+      g_config_loaded BOOLEAN := FALSE;
+
+      PROCEDURE get_value(p_key VARCHAR2, p_val OUT VARCHAR2) IS
+      BEGIN
+        SELECT value INTO p_val FROM config WHERE key = p_key;
+      END;
+
+    BEGIN
+      g_config_loaded := TRUE;
+      DBMS_OUTPUT.PUT_LINE('Config package initialized');
+    END config_pkg;
+  expected_postgresql: |
+    -- Package initialization block: call init function on first use
+    CREATE OR REPLACE FUNCTION config_pkg__get_value(p_key VARCHAR, OUT p_val VARCHAR)
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      SELECT value INTO p_val FROM config WHERE key = p_key;
+    END;
+    $$;
+
+    -- Initialization function (call once at session start or via event trigger)
+    CREATE OR REPLACE FUNCTION config_pkg__init() RETURNS VOID
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      RAISE NOTICE 'Config package initialized';
+    END;
+    $$;
+  complexity: 8
+  constructs: ["PACKAGE BODY", "INITIALIZATION_BLOCK"]
+  tags: ["packages", "initialization", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle package initialization block runs once per session"
+    - "PG has no package concept; extract to schema-qualified functions"
+    - "Initialization block becomes a separate init function"
+
+# ---------------------------------------------------------------------------
+# Package with public constant + private function
+# ---------------------------------------------------------------------------
+
+- name: package_public_constant_private_function
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PACKAGE util_pkg IS
+      c_max_retries CONSTANT NUMBER := 3;
+      FUNCTION format_name(p_first VARCHAR2, p_last VARCHAR2) RETURN VARCHAR2;
+    END util_pkg;
+
+    CREATE OR REPLACE PACKAGE BODY util_pkg IS
+      FUNCTION sanitize(p_val VARCHAR2) RETURN VARCHAR2 IS
+      BEGIN
+        RETURN TRIM(UPPER(p_val));
+      END;
+
+      FUNCTION format_name(p_first VARCHAR2, p_last VARCHAR2) RETURN VARCHAR2 IS
+      BEGIN
+        RETURN sanitize(p_last) || ', ' || sanitize(p_first);
+      END;
+    END util_pkg;
+  expected_postgresql: |
+    -- Public constant: use a function or SET/GUC
+    CREATE OR REPLACE FUNCTION util_pkg__c_max_retries() RETURNS INTEGER
+    LANGUAGE sql IMMUTABLE AS $$ SELECT 3; $$;
+
+    -- Private helper (prefix with underscore convention)
+    CREATE OR REPLACE FUNCTION util_pkg___sanitize(p_val VARCHAR) RETURNS VARCHAR
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      RETURN TRIM(UPPER(p_val));
+    END;
+    $$;
+
+    CREATE OR REPLACE FUNCTION util_pkg__format_name(p_first VARCHAR, p_last VARCHAR) RETURNS VARCHAR
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      RETURN util_pkg___sanitize(p_last) || ', ' || util_pkg___sanitize(p_first);
+    END;
+    $$;
+  complexity: 7
+  constructs: ["PACKAGE", "CONSTANT", "PRIVATE_FUNCTION"]
+  tags: ["packages", "encapsulation", "reviewer_gap"]
+  acceptance_criteria:
+    - "Public constants become IMMUTABLE functions"
+    - "Private functions use underscore naming convention"
+
+# ---------------------------------------------------------------------------
+# Package with cursor variable (REF CURSOR)
+# ---------------------------------------------------------------------------
+
+- name: package_ref_cursor_return
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PACKAGE emp_pkg IS
+      TYPE emp_cursor IS REF CURSOR RETURN employees%ROWTYPE;
+      FUNCTION get_by_dept(p_dept_id NUMBER) RETURN emp_cursor;
+    END emp_pkg;
+
+    CREATE OR REPLACE PACKAGE BODY emp_pkg IS
+      FUNCTION get_by_dept(p_dept_id NUMBER) RETURN emp_cursor IS
+        v_cur emp_cursor;
+      BEGIN
+        OPEN v_cur FOR SELECT * FROM employees WHERE department_id = p_dept_id;
+        RETURN v_cur;
+      END;
+    END emp_pkg;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION emp_pkg__get_by_dept(p_dept_id INTEGER)
+    RETURNS REFCURSOR
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_cur REFCURSOR;
+    BEGIN
+      OPEN v_cur FOR SELECT * FROM employees WHERE department_id = p_dept_id;
+      RETURN v_cur;
+    END;
+    $$;
+  complexity: 8
+  constructs: ["PACKAGE", "REF CURSOR", "ROWTYPE"]
+  tags: ["packages", "cursor", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle REF CURSOR becomes PG REFCURSOR"
+    - "Package-level type declaration is removed"
+    - "Function returns REFCURSOR directly"
+
+# ---------------------------------------------------------------------------
+# Pipelined function (PIPE ROW)
+# ---------------------------------------------------------------------------
+
+- name: pipelined_function
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE FUNCTION get_numbers(p_max NUMBER)
+    RETURN number_table PIPELINED IS
+    BEGIN
+      FOR i IN 1..p_max LOOP
+        PIPE ROW(i);
+      END LOOP;
+      RETURN;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION get_numbers(p_max INTEGER)
+    RETURNS SETOF INTEGER
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      FOR i IN 1..p_max LOOP
+        RETURN NEXT i;
+      END LOOP;
+    END;
+    $$;
+  complexity: 6
+  constructs: ["PIPELINED", "PIPE ROW"]
+  tags: ["pipelined", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle PIPELINED function becomes RETURNS SETOF"
+    - "PIPE ROW becomes RETURN NEXT"
+
+# ---------------------------------------------------------------------------
+# Object type with MEMBER function
+# ---------------------------------------------------------------------------
+
+- name: object_type_member_function
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE TYPE address_t AS OBJECT (
+      street VARCHAR2(200),
+      city VARCHAR2(100),
+      zip VARCHAR2(20),
+      MEMBER FUNCTION full_address RETURN VARCHAR2
+    );
+
+    CREATE OR REPLACE TYPE BODY address_t IS
+      MEMBER FUNCTION full_address RETURN VARCHAR2 IS
+      BEGIN
+        RETURN street || ', ' || city || ' ' || zip;
+      END;
+    END;
+  expected_postgresql: |
+    CREATE TYPE address_t AS (
+      street VARCHAR(200),
+      city VARCHAR(100),
+      zip VARCHAR(20)
+    );
+
+    CREATE OR REPLACE FUNCTION address_t_full_address(self address_t) RETURNS VARCHAR
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      RETURN self.street || ', ' || self.city || ' ' || self.zip;
+    END;
+    $$;
+  complexity: 8
+  constructs: ["OBJECT TYPE", "MEMBER FUNCTION"]
+  tags: ["object_types", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle object types become PG composite types"
+    - "MEMBER functions become standalone functions with self parameter"
+
+# ---------------------------------------------------------------------------
+# DETERMINISTIC function → IMMUTABLE
+# ---------------------------------------------------------------------------
+
+- name: deterministic_to_immutable
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE FUNCTION tax_rate(p_state VARCHAR2)
+    RETURN NUMBER DETERMINISTIC IS
+    BEGIN
+      RETURN CASE p_state WHEN 'CA' THEN 0.0725 WHEN 'TX' THEN 0.0625 ELSE 0.05 END;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION tax_rate(p_state VARCHAR)
+    RETURNS NUMERIC
+    LANGUAGE plpgsql IMMUTABLE AS $$
+    BEGIN
+      RETURN CASE p_state WHEN 'CA' THEN 0.0725 WHEN 'TX' THEN 0.0625 ELSE 0.05 END;
+    END;
+    $$;
+  complexity: 3
+  constructs: ["DETERMINISTIC"]
+  tags: ["function_attributes", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle DETERMINISTIC maps to PG IMMUTABLE"
+    - "Enables query optimizer to cache results"
+
+# ---------------------------------------------------------------------------
+# PARALLEL_ENABLE function → remove
+# ---------------------------------------------------------------------------
+
+- name: parallel_enable_removal
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE FUNCTION calc_score(p_id NUMBER)
+    RETURN NUMBER PARALLEL_ENABLE IS
+    BEGIN
+      RETURN p_id * 10;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION calc_score(p_id INTEGER)
+    RETURNS NUMERIC
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      RETURN p_id * 10;
+    END;
+    $$;
+  complexity: 3
+  constructs: ["PARALLEL_ENABLE"]
+  tags: ["function_attributes", "remove_hint", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle PARALLEL_ENABLE has no PG equivalent"
+    - "Simply remove the hint; PG parallelism is optimizer-driven"
+
+# ---------------------------------------------------------------------------
+# RESULT_CACHE function → remove
+# ---------------------------------------------------------------------------
+
+- name: result_cache_removal
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE FUNCTION get_config(p_key VARCHAR2)
+    RETURN VARCHAR2 RESULT_CACHE IS
+      v_val VARCHAR2(4000);
+    BEGIN
+      SELECT value INTO v_val FROM config WHERE key = p_key;
+      RETURN v_val;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION get_config(p_key VARCHAR)
+    RETURNS VARCHAR
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_val VARCHAR(4000);
+    BEGIN
+      SELECT value INTO v_val FROM config WHERE key = p_key;
+      RETURN v_val;
+    END;
+    $$;
+  complexity: 3
+  constructs: ["RESULT_CACHE"]
+  tags: ["function_attributes", "remove_hint", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle RESULT_CACHE has no direct PG equivalent"
+    - "Consider materialized views or application-level caching"
+
+# ---------------------------------------------------------------------------
+# Nested function definition → extract to top level
+# ---------------------------------------------------------------------------
+
+- name: nested_function_extraction
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE FUNCTION process_order(p_order_id NUMBER) RETURN NUMBER IS
+      FUNCTION validate_status(p_status VARCHAR2) RETURN BOOLEAN IS
+      BEGIN
+        RETURN p_status IN ('NEW', 'PENDING', 'APPROVED');
+      END;
+      v_status VARCHAR2(20);
+    BEGIN
+      SELECT status INTO v_status FROM orders WHERE id = p_order_id;
+      IF validate_status(v_status) THEN
+        RETURN 1;
+      ELSE
+        RETURN 0;
+      END IF;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION process_order__validate_status(p_status VARCHAR)
+    RETURNS BOOLEAN
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      RETURN p_status IN ('NEW', 'PENDING', 'APPROVED');
+    END;
+    $$;
+
+    CREATE OR REPLACE FUNCTION process_order(p_order_id INTEGER)
+    RETURNS INTEGER
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_status VARCHAR(20);
+    BEGIN
+      SELECT status INTO v_status FROM orders WHERE id = p_order_id;
+      IF process_order__validate_status(v_status) THEN
+        RETURN 1;
+      ELSE
+        RETURN 0;
+      END IF;
+    END;
+    $$;
+  complexity: 7
+  constructs: ["NESTED_FUNCTION"]
+  tags: ["nested_function", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle nested functions must be extracted to top-level in PG"
+    - "Name with parent function prefix to avoid collisions"
+
+# ---------------------------------------------------------------------------
+# PRAGMA RESTRICT_REFERENCES → remove
+# ---------------------------------------------------------------------------
+
+- name: pragma_restrict_references_removal
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PACKAGE math_pkg IS
+      FUNCTION square(p_val NUMBER) RETURN NUMBER;
+      PRAGMA RESTRICT_REFERENCES(square, WNDS, RNPS, WNPS);
+    END math_pkg;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION math_pkg__square(p_val NUMERIC)
+    RETURNS NUMERIC
+    LANGUAGE sql IMMUTABLE AS $$
+      SELECT p_val * p_val;
+    $$;
+  complexity: 3
+  constructs: ["PRAGMA", "RESTRICT_REFERENCES"]
+  tags: ["pragma", "remove_hint", "reviewer_gap"]
+  acceptance_criteria:
+    - "PRAGMA RESTRICT_REFERENCES has no PG equivalent"
+    - "Remove entirely; use IMMUTABLE/STABLE/VOLATILE as appropriate"

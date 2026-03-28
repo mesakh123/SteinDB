@@ -1,0 +1,181 @@
+# Golden tests: Oracle nested functions -> PostgreSQL top-level extraction
+# Oracle allows function-inside-function; PG requires all functions at top level
+
+- name: simple_nested_function_extract
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE FUNCTION calculate_bonus(p_salary NUMBER) RETURN NUMBER IS
+      FUNCTION bonus_rate(p_sal NUMBER) RETURN NUMBER IS
+      BEGIN
+        IF p_sal > 100000 THEN RETURN 0.15;
+        ELSIF p_sal > 50000 THEN RETURN 0.10;
+        ELSE RETURN 0.05;
+        END IF;
+      END bonus_rate;
+    BEGIN
+      RETURN p_salary * bonus_rate(p_salary);
+    END;
+  expected_postgresql: |
+    -- Nested function extracted to top level
+    CREATE OR REPLACE FUNCTION bonus_rate(p_sal NUMERIC) RETURNS NUMERIC
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      IF p_sal > 100000 THEN RETURN 0.15;
+      ELSIF p_sal > 50000 THEN RETURN 0.10;
+      ELSE RETURN 0.05;
+      END IF;
+    END;
+    $$;
+
+    CREATE OR REPLACE FUNCTION calculate_bonus(p_salary NUMERIC) RETURNS NUMERIC
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      RETURN p_salary * bonus_rate(p_salary);
+    END;
+    $$;
+  complexity: 5
+  constructs: ["NESTED_FUNCTION"]
+  tags: ["nested_functions"]
+  acceptance_criteria:
+    - "Inner function must be extracted to top-level before outer function"
+    - "Execution order: create inner function first, then outer"
+
+- name: nested_function_with_parent_variable
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE FUNCTION process_order(p_order_id NUMBER) RETURN VARCHAR2 IS
+      v_discount NUMBER := 0.1;
+
+      FUNCTION apply_discount(p_amount NUMBER) RETURN NUMBER IS
+      BEGIN
+        RETURN p_amount * (1 - v_discount);
+      END apply_discount;
+
+      v_total NUMBER;
+    BEGIN
+      SELECT amount INTO v_total FROM orders WHERE id = p_order_id;
+      v_total := apply_discount(v_total);
+      RETURN 'Discounted total: ' || v_total;
+    END;
+  expected_postgresql: |
+    -- Nested function extracted; parent variable passed as parameter
+    CREATE OR REPLACE FUNCTION apply_discount(p_amount NUMERIC, p_discount NUMERIC) RETURNS NUMERIC
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      RETURN p_amount * (1 - p_discount);
+    END;
+    $$;
+
+    CREATE OR REPLACE FUNCTION process_order(p_order_id INTEGER) RETURNS VARCHAR
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_discount NUMERIC := 0.1;
+      v_total NUMERIC;
+    BEGIN
+      SELECT amount INTO STRICT v_total FROM orders WHERE id = p_order_id;
+      v_total := apply_discount(v_total, v_discount);
+      RETURN 'Discounted total: ' || v_total::TEXT;
+    END;
+    $$;
+  complexity: 7
+  constructs: ["NESTED_FUNCTION", "PARENT_VARIABLE_ACCESS", "SELECT INTO"]
+  tags: ["nested_functions"]
+  acceptance_criteria:
+    - "Parent-scope variables become explicit parameters in extracted function"
+    - "Caller must pass the variable value at each call site"
+
+- name: deeply_nested_functions_extract_all
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE FUNCTION compute_tax(p_income NUMBER) RETURN NUMBER IS
+      FUNCTION get_bracket(p_amt NUMBER) RETURN NUMBER IS
+        FUNCTION is_exempt(p_val NUMBER) RETURN BOOLEAN IS
+        BEGIN
+          RETURN p_val < 10000;
+        END is_exempt;
+      BEGIN
+        IF is_exempt(p_amt) THEN RETURN 0;
+        ELSIF p_amt < 50000 THEN RETURN 1;
+        ELSE RETURN 2;
+        END IF;
+      END get_bracket;
+    BEGIN
+      RETURN p_income * (get_bracket(p_income) * 0.1);
+    END;
+  expected_postgresql: |
+    -- All nested functions extracted to top level, innermost first
+    CREATE OR REPLACE FUNCTION is_exempt(p_val NUMERIC) RETURNS BOOLEAN
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      RETURN p_val < 10000;
+    END;
+    $$;
+
+    CREATE OR REPLACE FUNCTION get_bracket(p_amt NUMERIC) RETURNS INTEGER
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      IF is_exempt(p_amt) THEN RETURN 0;
+      ELSIF p_amt < 50000 THEN RETURN 1;
+      ELSE RETURN 2;
+      END IF;
+    END;
+    $$;
+
+    CREATE OR REPLACE FUNCTION compute_tax(p_income NUMERIC) RETURNS NUMERIC
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      RETURN p_income * (get_bracket(p_income) * 0.1);
+    END;
+    $$;
+  complexity: 8
+  constructs: ["NESTED_FUNCTION", "DEEP_NESTING"]
+  tags: ["nested_functions", "high_complexity"]
+  acceptance_criteria:
+    - "Innermost functions extracted first (dependency order)"
+    - "Three levels of nesting flattened to three top-level functions"
+
+- name: nested_function_in_package_extract_to_schema
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PACKAGE BODY billing_pkg IS
+      FUNCTION calculate_total(p_order_id NUMBER) RETURN NUMBER IS
+        FUNCTION line_total(p_qty NUMBER, p_price NUMBER) RETURN NUMBER IS
+        BEGIN
+          RETURN p_qty * p_price;
+        END line_total;
+        v_total NUMBER := 0;
+      BEGIN
+        FOR rec IN (SELECT qty, price FROM order_lines WHERE order_id = p_order_id) LOOP
+          v_total := v_total + line_total(rec.qty, rec.price);
+        END LOOP;
+        RETURN v_total;
+      END calculate_total;
+    END billing_pkg;
+  expected_postgresql: |
+    -- Package body dissolved; nested function extracted to schema level
+    CREATE OR REPLACE FUNCTION billing_pkg__line_total(p_qty NUMERIC, p_price NUMERIC) RETURNS NUMERIC
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      RETURN p_qty * p_price;
+    END;
+    $$;
+
+    CREATE OR REPLACE FUNCTION billing_pkg__calculate_total(p_order_id INTEGER) RETURNS NUMERIC
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_total NUMERIC := 0;
+      rec RECORD;
+    BEGIN
+      FOR rec IN SELECT qty, price FROM order_lines WHERE order_id = p_order_id LOOP
+        v_total := v_total + billing_pkg__line_total(rec.qty, rec.price);
+      END LOOP;
+      RETURN v_total;
+    END;
+    $$;
+  complexity: 9
+  constructs: ["NESTED_FUNCTION", "PACKAGE_BODY", "CURSOR_FOR_LOOP"]
+  tags: ["nested_functions", "packages", "high_complexity"]
+  acceptance_criteria:
+    - "Package name becomes function prefix (billing_pkg__)"
+    - "Nested function extracted to schema-level with package prefix"
+    - "Package body is dissolved into individual functions"

@@ -1,0 +1,228 @@
+# Golden tests: PL/SQL procedures and functions → PL/pgSQL equivalents
+
+- name: simple_procedure
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE update_salary(p_emp_id NUMBER, p_amount NUMBER) IS
+    BEGIN
+      UPDATE employees SET salary = salary + p_amount WHERE id = p_emp_id;
+      COMMIT;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE update_salary(p_emp_id INTEGER, p_amount NUMERIC)
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      UPDATE employees SET salary = salary + p_amount WHERE id = p_emp_id;
+    END;
+    $$;
+  complexity: 2
+  constructs: ["PROCEDURE", "IS", "COMMIT"]
+
+- name: function_return_to_returns
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE FUNCTION get_emp_name(p_id NUMBER) RETURN VARCHAR2 IS
+      v_name VARCHAR2(100);
+    BEGIN
+      SELECT name INTO v_name FROM employees WHERE id = p_id;
+      RETURN v_name;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION get_emp_name(p_id INTEGER) RETURNS VARCHAR
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_name VARCHAR(100);
+    BEGIN
+      SELECT name INTO v_name FROM employees WHERE id = p_id;
+      RETURN v_name;
+    END;
+    $$;
+  complexity: 2
+  constructs: ["FUNCTION", "RETURN", "IS", "VARCHAR2"]
+
+- name: is_to_as_dollar
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE FUNCTION add_numbers(a NUMBER, b NUMBER) RETURN NUMBER IS
+      v_result NUMBER;
+    BEGIN
+      v_result := a + b;
+      RETURN v_result;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION add_numbers(a NUMERIC, b NUMERIC) RETURNS NUMERIC
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_result NUMERIC;
+    BEGIN
+      v_result := a + b;
+      RETURN v_result;
+    END;
+    $$;
+  complexity: 1
+  constructs: ["IS", "FUNCTION", "RETURN"]
+
+- name: variable_declarations
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE type_demo IS
+      v_name VARCHAR2(200);
+      v_count PLS_INTEGER := 0;
+      v_index BINARY_INTEGER;
+      v_flag BOOLEAN := FALSE;
+    BEGIN
+      NULL;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE type_demo()
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_name VARCHAR(200);
+      v_count INTEGER := 0;
+      v_index INTEGER;
+      v_flag BOOLEAN := FALSE;
+    BEGIN
+      NULL;
+    END;
+    $$;
+  complexity: 2
+  constructs: ["VARCHAR2", "PLS_INTEGER", "BINARY_INTEGER", "BOOLEAN"]
+
+- name: out_parameters
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE get_emp_details(
+      p_id IN NUMBER,
+      p_name OUT VARCHAR2,
+      p_salary OUT NUMBER
+    ) IS
+    BEGIN
+      SELECT name, salary INTO p_name, p_salary FROM employees WHERE id = p_id;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE get_emp_details(
+      p_id IN INTEGER,
+      p_name OUT VARCHAR,
+      p_salary OUT NUMERIC
+    )
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      SELECT name, salary INTO p_name, p_salary FROM employees WHERE id = p_id;
+    END;
+    $$;
+  complexity: 3
+  constructs: ["OUT", "IN", "PROCEDURE"]
+
+- name: in_out_parameters
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE adjust_salary(
+      p_emp_id IN NUMBER,
+      p_salary IN OUT NUMBER
+    ) IS
+    BEGIN
+      p_salary := p_salary * 1.10;
+      UPDATE employees SET salary = p_salary WHERE id = p_emp_id;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE adjust_salary(
+      p_emp_id IN INTEGER,
+      p_salary INOUT NUMERIC
+    )
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      p_salary := p_salary * 1.10;
+      UPDATE employees SET salary = p_salary WHERE id = p_emp_id;
+    END;
+    $$;
+  complexity: 3
+  constructs: ["IN OUT", "PROCEDURE"]
+
+- name: default_parameter_values
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE log_message(
+      p_message VARCHAR2,
+      p_level VARCHAR2 DEFAULT 'INFO'
+    ) IS
+    BEGIN
+      DBMS_OUTPUT.PUT_LINE(p_level || ': ' || p_message);
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE log_message(
+      p_message VARCHAR,
+      p_level VARCHAR DEFAULT 'INFO'
+    )
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      RAISE NOTICE '%: %', p_level, p_message;
+    END;
+    $$;
+  complexity: 2
+  constructs: ["DEFAULT", "DBMS_OUTPUT", "VARCHAR2"]
+
+- name: execute_immediate_to_execute
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE run_ddl(p_sql VARCHAR2) IS
+    BEGIN
+      EXECUTE IMMEDIATE p_sql;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE run_ddl(p_sql VARCHAR)
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      EXECUTE p_sql;
+    END;
+    $$;
+  complexity: 3
+  constructs: ["EXECUTE IMMEDIATE", "VARCHAR2"]
+
+- name: dbms_output_to_raise_notice
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE debug_info(p_id NUMBER) IS
+      v_name VARCHAR2(100);
+    BEGIN
+      SELECT name INTO v_name FROM employees WHERE id = p_id;
+      DBMS_OUTPUT.PUT_LINE('Employee: ' || v_name);
+      DBMS_OUTPUT.PUT_LINE('ID: ' || TO_CHAR(p_id));
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE debug_info(p_id INTEGER)
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_name VARCHAR(100);
+    BEGIN
+      SELECT name INTO v_name FROM employees WHERE id = p_id;
+      RAISE NOTICE 'Employee: %', v_name;
+      RAISE NOTICE 'ID: %', p_id::TEXT;
+    END;
+    $$;
+  complexity: 2
+  constructs: ["DBMS_OUTPUT", "VARCHAR2"]
+
+- name: raise_application_error_to_raise_exception
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE validate_age(p_age NUMBER) IS
+    BEGIN
+      IF p_age < 0 THEN
+        RAISE_APPLICATION_ERROR(-20001, 'Age cannot be negative');
+      ELSIF p_age > 150 THEN
+        RAISE_APPLICATION_ERROR(-20002, 'Age exceeds maximum');
+      END IF;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE validate_age(p_age INTEGER)
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      IF p_age < 0 THEN
+        RAISE EXCEPTION 'Age cannot be negative';
+      ELSIF p_age > 150 THEN
+        RAISE EXCEPTION 'Age exceeds maximum';
+      END IF;
+    END;
+    $$;
+  complexity: 3
+  constructs: ["RAISE_APPLICATION_ERROR", "IF", "ELSIF"]

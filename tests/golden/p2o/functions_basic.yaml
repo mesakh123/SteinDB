@@ -1,0 +1,105 @@
+# =============================================================================
+# SteinDB Golden Tests — P2O Function Conversions (Basic)
+# PostgreSQL-to-Oracle reverse mappings for functions
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# PG-specific functions → Oracle equivalents
+# ---------------------------------------------------------------------------
+
+- name: coalesce_to_nvl
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT COALESCE(name, 'Unknown') FROM employees"
+  expected: "SELECT NVL(name, 'Unknown') FROM employees"
+  complexity: 1
+  constructs: ["COALESCE"]
+  tags: ["p2o", "null_handling", "reviewer_gap"]
+  acceptance_criteria:
+    - "PG COALESCE with 2 args maps to Oracle NVL"
+    - "COALESCE with 3+ args stays as COALESCE (Oracle supports it)"
+
+- name: string_agg_to_listagg
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: >-
+    SELECT department_id, STRING_AGG(name, ', ' ORDER BY name)
+    FROM employees GROUP BY department_id
+  expected: >-
+    SELECT department_id,
+      LISTAGG(name, ', ') WITHIN GROUP (ORDER BY name)
+    FROM employees GROUP BY department_id
+  complexity: 4
+  constructs: ["STRING_AGG"]
+  tags: ["p2o", "aggregate", "reviewer_gap"]
+  acceptance_criteria:
+    - "PG STRING_AGG maps to Oracle LISTAGG"
+    - "ORDER BY moves inside WITHIN GROUP clause"
+
+- name: gen_random_uuid_to_sys_guid
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT gen_random_uuid()"
+  expected: "SELECT SYS_GUID() FROM DUAL"
+  complexity: 2
+  constructs: ["gen_random_uuid"]
+  tags: ["p2o", "uuid", "reviewer_gap"]
+  acceptance_criteria:
+    - "PG gen_random_uuid() maps to Oracle SYS_GUID()"
+    - "Format differs (UUID vs RAW) but both generate unique IDs"
+
+- name: now_to_sysdate
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT NOW()"
+  expected: "SELECT SYSDATE FROM DUAL"
+  complexity: 1
+  constructs: ["NOW"]
+  tags: ["p2o", "datetime", "reviewer_gap"]
+  acceptance_criteria:
+    - "PG NOW() maps to Oracle SYSDATE (date) or SYSTIMESTAMP (timestamp)"
+
+- name: random_to_dbms_random
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT random()"
+  expected: "SELECT DBMS_RANDOM.VALUE FROM DUAL"
+  complexity: 2
+  constructs: ["random"]
+  tags: ["p2o", "random", "reviewer_gap"]
+  acceptance_criteria:
+    - "PG random() maps to Oracle DBMS_RANDOM.VALUE"
+
+- name: pg_backend_pid_to_userenv
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT pg_backend_pid()"
+  expected: "SELECT USERENV('SESSIONID') FROM DUAL"
+  complexity: 3
+  constructs: ["pg_backend_pid"]
+  tags: ["p2o", "session", "reviewer_gap"]
+  acceptance_criteria:
+    - "PG pg_backend_pid() maps to Oracle USERENV('SESSIONID')"
+    - "Not exact equivalents but serve similar purpose"
+
+- name: current_schema_to_sys_context
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT current_schema()"
+  expected: "SELECT SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') FROM DUAL"
+  complexity: 3
+  constructs: ["current_schema"]
+  tags: ["p2o", "session", "reviewer_gap"]
+  acceptance_criteria:
+    - "PG current_schema() maps to Oracle SYS_CONTEXT"
+
+- name: encode_hex_to_rawtohex
+  category: p2o_functions
+  direction: pg_to_oracle
+  source: "SELECT ENCODE(data, 'hex') FROM binary_data"
+  expected: "SELECT RAWTOHEX(data) FROM binary_data"
+  complexity: 3
+  constructs: ["ENCODE"]
+  tags: ["p2o", "raw", "reviewer_gap"]
+  acceptance_criteria:
+    - "PG ENCODE(col, 'hex') maps to Oracle RAWTOHEX"

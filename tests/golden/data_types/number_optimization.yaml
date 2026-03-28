@@ -1,0 +1,182 @@
+# =============================================================================
+# SteinDB Golden Tests — NUMBER Integer Optimization
+# CYBERTEC rules: NUMBER(1-4,0)→SMALLINT, (5-9,0)→INTEGER,
+#   (10-18,0)→BIGINT, (19+,0)→NUMERIC, (p,s>0)→NUMERIC(p,s)
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# SMALLINT: NUMBER(1-4, 0)
+# ---------------------------------------------------------------------------
+
+- name: number_1_to_smallint
+  category: data_types
+  oracle: "CREATE TABLE t (flag NUMBER(1))"
+  expected_postgresql: "CREATE TABLE t (flag SMALLINT)"
+  constructs: ["NUMBER"]
+  tags: ["integer_optimization", "smallint"]
+
+- name: number_2_to_smallint
+  category: data_types
+  oracle: "CREATE TABLE t (priority NUMBER(2))"
+  expected_postgresql: "CREATE TABLE t (priority SMALLINT)"
+  constructs: ["NUMBER"]
+  tags: ["integer_optimization", "smallint"]
+
+- name: number_3_to_smallint
+  category: data_types
+  oracle: "CREATE TABLE t (level NUMBER(3))"
+  expected_postgresql: "CREATE TABLE t (level SMALLINT)"
+  constructs: ["NUMBER"]
+  tags: ["integer_optimization", "smallint"]
+
+- name: number_4_to_smallint
+  category: data_types
+  oracle: "CREATE TABLE t (code NUMBER(4))"
+  expected_postgresql: "CREATE TABLE t (code SMALLINT)"
+  constructs: ["NUMBER"]
+  tags: ["integer_optimization", "smallint"]
+
+# ---------------------------------------------------------------------------
+# INTEGER: NUMBER(5-9, 0)
+# ---------------------------------------------------------------------------
+
+- name: number_5_to_integer
+  category: data_types
+  oracle: "CREATE TABLE t (zip_code NUMBER(5))"
+  expected_postgresql: "CREATE TABLE t (zip_code INTEGER)"
+  constructs: ["NUMBER"]
+  tags: ["integer_optimization", "integer"]
+
+- name: number_7_to_integer
+  category: data_types
+  oracle: "CREATE TABLE t (ref_num NUMBER(7))"
+  expected_postgresql: "CREATE TABLE t (ref_num INTEGER)"
+  constructs: ["NUMBER"]
+  tags: ["integer_optimization", "integer"]
+
+- name: number_9_to_integer
+  category: data_types
+  oracle: "CREATE TABLE t (id NUMBER(9))"
+  expected_postgresql: "CREATE TABLE t (id INTEGER)"
+  constructs: ["NUMBER"]
+  tags: ["integer_optimization", "integer"]
+
+# ---------------------------------------------------------------------------
+# BIGINT: NUMBER(10-18, 0)
+# ---------------------------------------------------------------------------
+
+- name: number_10_to_bigint
+  category: data_types
+  oracle: "CREATE TABLE t (account_id NUMBER(10))"
+  expected_postgresql: "CREATE TABLE t (account_id BIGINT)"
+  constructs: ["NUMBER"]
+  tags: ["integer_optimization", "bigint"]
+
+- name: number_14_to_bigint
+  category: data_types
+  oracle: "CREATE TABLE t (txn_id NUMBER(14))"
+  expected_postgresql: "CREATE TABLE t (txn_id BIGINT)"
+  constructs: ["NUMBER"]
+  tags: ["integer_optimization", "bigint"]
+
+- name: number_18_to_bigint
+  category: data_types
+  oracle: "CREATE TABLE t (big_ref NUMBER(18))"
+  expected_postgresql: "CREATE TABLE t (big_ref BIGINT)"
+  constructs: ["NUMBER"]
+  tags: ["integer_optimization", "bigint"]
+
+# ---------------------------------------------------------------------------
+# NUMERIC: NUMBER(19+, 0) — too large for int8
+# ---------------------------------------------------------------------------
+
+- name: number_19_to_numeric
+  category: data_types
+  oracle: "CREATE TABLE t (huge_id NUMBER(19))"
+  expected_postgresql: "CREATE TABLE t (huge_id NUMERIC(19))"
+  constructs: ["NUMBER"]
+  tags: ["integer_optimization", "numeric_fallback"]
+
+- name: number_38_to_numeric
+  category: data_types
+  oracle: "CREATE TABLE t (oracle_max NUMBER(38))"
+  expected_postgresql: "CREATE TABLE t (oracle_max NUMERIC(38))"
+  constructs: ["NUMBER"]
+  tags: ["integer_optimization", "numeric_fallback"]
+
+# ---------------------------------------------------------------------------
+# NUMERIC(p,s): NUMBER with scale > 0
+# ---------------------------------------------------------------------------
+
+- name: number_10_2_to_numeric
+  category: data_types
+  oracle: "CREATE TABLE t (amount NUMBER(10,2))"
+  expected_postgresql: "CREATE TABLE t (amount NUMERIC(10,2))"
+  constructs: ["NUMBER"]
+  tags: ["numeric_with_scale"]
+
+- name: number_5_3_to_numeric
+  category: data_types
+  oracle: "CREATE TABLE t (rate NUMBER(5,3))"
+  expected_postgresql: "CREATE TABLE t (rate NUMERIC(5,3))"
+  constructs: ["NUMBER"]
+  tags: ["numeric_with_scale"]
+
+- name: number_20_6_to_numeric
+  category: data_types
+  oracle: "CREATE TABLE t (precise_val NUMBER(20,6))"
+  expected_postgresql: "CREATE TABLE t (precise_val NUMERIC(20,6))"
+  constructs: ["NUMBER"]
+  tags: ["numeric_with_scale"]
+
+# ---------------------------------------------------------------------------
+# NUMERIC: NUMBER without precision
+# ---------------------------------------------------------------------------
+
+- name: number_bare_to_numeric
+  category: data_types
+  oracle: "CREATE TABLE t (val NUMBER)"
+  expected_postgresql: "CREATE TABLE t (val NUMERIC)"
+  constructs: ["NUMBER"]
+  tags: ["numeric_no_precision"]
+
+- name: number_star_to_numeric
+  category: data_types
+  oracle: "CREATE TABLE t (val NUMBER(*))"
+  expected_postgresql: "CREATE TABLE t (val NUMERIC)"
+  constructs: ["NUMBER"]
+  tags: ["numeric_no_precision"]
+
+# ---------------------------------------------------------------------------
+# BOOLEAN: NUMBER(1,0) used as boolean flag
+# ---------------------------------------------------------------------------
+
+- name: number_1_0_boolean_flag
+  category: data_types
+  oracle: "CREATE TABLE t (is_active NUMBER(1,0))"
+  expected_postgresql: "CREATE TABLE t (is_active BOOLEAN)"
+  constructs: ["NUMBER"]
+  tags: ["boolean_optimization"]
+  complexity: 2
+  acceptance_criteria:
+    - "NUMBER(1,0) named with boolean-like prefix (is_, has_, can_) should map to BOOLEAN"
+
+- name: number_1_0_boolean_flag_has
+  category: data_types
+  oracle: "CREATE TABLE t (has_access NUMBER(1,0))"
+  expected_postgresql: "CREATE TABLE t (has_access BOOLEAN)"
+  constructs: ["NUMBER"]
+  tags: ["boolean_optimization"]
+  complexity: 2
+
+# ---------------------------------------------------------------------------
+# MULTI-COLUMN: multiple NUMBER columns in one CREATE TABLE
+# ---------------------------------------------------------------------------
+
+- name: multi_number_columns
+  category: data_types
+  oracle: "CREATE TABLE t (id NUMBER(9), status NUMBER(2), amount NUMBER(10,2), big_ref NUMBER(18), flag NUMBER(1,0))"
+  expected_postgresql: "CREATE TABLE t (id INTEGER, status SMALLINT, amount NUMERIC(10,2), big_ref BIGINT, flag BOOLEAN)"
+  constructs: ["NUMBER"]
+  tags: ["integer_optimization", "multi_column"]
+  complexity: 3

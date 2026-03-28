@@ -1,0 +1,44 @@
+- name: create_sequence_basic
+  category: sequences
+  oracle: "CREATE SEQUENCE emp_seq START WITH 1 INCREMENT BY 1"
+  expected_postgresql: "CREATE SEQUENCE emp_seq START WITH 1 INCREMENT BY 1"
+  constructs: ["CREATE SEQUENCE"]
+  tags: ["no_change"]
+
+- name: sequence_nextval
+  category: sequences
+  oracle: "SELECT emp_seq.NEXTVAL FROM DUAL"
+  expected_postgresql: "SELECT nextval('emp_seq')"
+  constructs: ["NEXTVAL", "DUAL"]
+
+- name: sequence_currval
+  category: sequences
+  oracle: "SELECT emp_seq.CURRVAL FROM DUAL"
+  expected_postgresql: "SELECT currval('emp_seq')"
+  constructs: ["CURRVAL", "DUAL"]
+
+- name: sequence_in_insert
+  category: sequences
+  oracle: "INSERT INTO employees (id, name) VALUES (emp_seq.NEXTVAL, 'John')"
+  expected_postgresql: "INSERT INTO employees (id, name) VALUES (nextval('emp_seq'), 'John')"
+  constructs: ["NEXTVAL"]
+
+- name: sequence_with_cache
+  category: sequences
+  oracle: "CREATE SEQUENCE order_seq START WITH 1000 INCREMENT BY 1 CACHE 20"
+  expected_postgresql: "CREATE SEQUENCE order_seq START WITH 1000 INCREMENT BY 1 CACHE 20"
+  constructs: ["CREATE SEQUENCE", "CACHE"]
+  tags: ["no_change"]
+
+- name: sequence_nocache
+  category: sequences
+  oracle: "CREATE SEQUENCE audit_seq NOCACHE"
+  expected_postgresql: "CREATE SEQUENCE audit_seq"
+  constructs: ["NOCACHE"]
+
+- name: sequence_maxvalue
+  category: sequences
+  oracle: "CREATE SEQUENCE limited_seq MAXVALUE 99999 CYCLE"
+  expected_postgresql: "CREATE SEQUENCE limited_seq MAXVALUE 99999 CYCLE"
+  constructs: ["MAXVALUE", "CYCLE"]
+  tags: ["no_change"]
