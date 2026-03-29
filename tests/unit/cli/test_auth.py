@@ -29,7 +29,7 @@ class TestAuthRegister:
         assert "registered successfully" in result.output.lower()
         mgr = ConfigManager(config_dir=config_dir)
         assert mgr.get("api_key") is not None
-        assert mgr.get("api_key").startswith("exdb_free_")
+        assert mgr.get("api_key").startswith("stdb_free_")
         assert mgr.get("email") == "user@example.com"
 
     def test_register_shows_token_preview(self, config_dir):
@@ -46,22 +46,22 @@ class TestAuthRegister:
 
 class TestAuthLogin:
     def test_login_with_token(self, config_dir):
-        result = runner.invoke(app, ["auth", "login", "--token", "exdb_free_abc123def456"])
+        result = runner.invoke(app, ["auth", "login", "--token", "stdb_free_abc123def456"])
         assert result.exit_code == 0
         assert "logged in" in result.output.lower()
         mgr = ConfigManager(config_dir=config_dir)
-        assert mgr.get("api_key") == "exdb_free_abc123def456"
+        assert mgr.get("api_key") == "stdb_free_abc123def456"
 
     def test_login_shows_tier(self, config_dir):
-        result = runner.invoke(app, ["auth", "login", "--token", "exdb_solo_abc123def456"])
+        result = runner.invoke(app, ["auth", "login", "--token", "stdb_solo_abc123def456"])
         assert result.exit_code == 0
         assert "solo" in result.output.lower()
 
     def test_login_overwrites_existing_token(self, config_dir):
-        runner.invoke(app, ["auth", "login", "--token", "exdb_free_old"])
-        runner.invoke(app, ["auth", "login", "--token", "exdb_free_new"])
+        runner.invoke(app, ["auth", "login", "--token", "stdb_free_old"])
+        runner.invoke(app, ["auth", "login", "--token", "stdb_free_new"])
         mgr = ConfigManager(config_dir=config_dir)
-        assert mgr.get("api_key") == "exdb_free_new"
+        assert mgr.get("api_key") == "stdb_free_new"
 
     def test_login_requires_token(self):
         result = runner.invoke(app, ["auth", "login"])
@@ -137,7 +137,7 @@ class TestAuthUpgrade:
 
 class TestAuthStatus:
     def test_status_shows_tier_info(self, config_dir):
-        runner.invoke(app, ["auth", "login", "--token", "exdb_free_abc123def456789012"])
+        runner.invoke(app, ["auth", "login", "--token", "stdb_free_abc123def456789012"])
         result = runner.invoke(app, ["auth", "status"])
         assert result.exit_code == 0
         assert "authenticated" in result.output.lower()
@@ -156,7 +156,7 @@ class TestAuthStatus:
         assert "stein auth register" in result.output
 
     def test_status_masks_token(self, config_dir):
-        token = "exdb_free_abc123def456789012345678901234567890"
+        token = "stdb_free_abc123def456789012345678901234567890"
         runner.invoke(app, ["auth", "login", "--token", token])
         result = runner.invoke(app, ["auth", "status"])
         # Full token should NOT be visible
@@ -165,6 +165,6 @@ class TestAuthStatus:
         assert "..." in result.output
 
     def test_status_shows_na_when_no_email(self, config_dir):
-        runner.invoke(app, ["auth", "login", "--token", "exdb_free_abc123def456789012"])
+        runner.invoke(app, ["auth", "login", "--token", "stdb_free_abc123def456789012"])
         result = runner.invoke(app, ["auth", "status"])
         assert "N/A" in result.output

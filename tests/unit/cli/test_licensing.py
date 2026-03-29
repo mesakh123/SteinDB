@@ -44,19 +44,19 @@ class TestGetTier:
         assert manager.get_tier() == AccountTier.FREE
 
     def test_registered_tier_with_free_key(self, config, manager):
-        config.set("api_key", "exdb_free_abc123")
+        config.set("api_key", "stdb_free_abc123")
         assert manager.get_tier() == AccountTier.REGISTERED
 
     def test_solo_tier(self, config, manager):
-        config.set("api_key", "exdb_solo_abc123")
+        config.set("api_key", "stdb_solo_abc123")
         assert manager.get_tier() == AccountTier.SOLO
 
     def test_team_tier(self, config, manager):
-        config.set("api_key", "exdb_team_abc123")
+        config.set("api_key", "stdb_team_abc123")
         assert manager.get_tier() == AccountTier.TEAM
 
     def test_enterprise_tier(self, config, manager):
-        config.set("api_key", "exdb_ent_abc123")
+        config.set("api_key", "stdb_ent_abc123")
         assert manager.get_tier() == AccountTier.ENTERPRISE
 
     def test_registered_tier_with_generic_key(self, config, manager):
@@ -77,19 +77,19 @@ class TestCanUseAI:
         assert manager.can_use_ai() is False
 
     def test_can_use_ai_with_registered(self, config, manager):
-        config.set("api_key", "exdb_free_abc123")
+        config.set("api_key", "stdb_free_abc123")
         assert manager.can_use_ai() is True
 
     def test_can_use_ai_with_solo(self, config, manager):
-        config.set("api_key", "exdb_solo_abc123")
+        config.set("api_key", "stdb_solo_abc123")
         assert manager.can_use_ai() is True
 
     def test_can_use_ai_with_team(self, config, manager):
-        config.set("api_key", "exdb_team_abc123")
+        config.set("api_key", "stdb_team_abc123")
         assert manager.can_use_ai() is True
 
     def test_can_use_ai_with_enterprise(self, config, manager):
-        config.set("api_key", "exdb_ent_abc123")
+        config.set("api_key", "stdb_ent_abc123")
         assert manager.can_use_ai() is True
 
     def test_cannot_use_ai_with_empty_key(self, config, manager):
@@ -102,19 +102,19 @@ class TestCanUseHostedInference:
         assert manager.can_use_hosted_inference() is False
 
     def test_cannot_use_hosted_inference_registered(self, config, manager):
-        config.set("api_key", "exdb_free_abc123")
+        config.set("api_key", "stdb_free_abc123")
         assert manager.can_use_hosted_inference() is False
 
     def test_can_use_hosted_inference_solo(self, config, manager):
-        config.set("api_key", "exdb_solo_abc123")
+        config.set("api_key", "stdb_solo_abc123")
         assert manager.can_use_hosted_inference() is True
 
     def test_can_use_hosted_inference_team(self, config, manager):
-        config.set("api_key", "exdb_team_abc123")
+        config.set("api_key", "stdb_team_abc123")
         assert manager.can_use_hosted_inference() is True
 
     def test_can_use_hosted_inference_enterprise(self, config, manager):
-        config.set("api_key", "exdb_ent_abc123")
+        config.set("api_key", "stdb_ent_abc123")
         assert manager.can_use_hosted_inference() is True
 
 

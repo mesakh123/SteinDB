@@ -21,20 +21,20 @@ class AccountTier(StrEnum):
 
 
 TOKEN_PREFIX_MAP: dict[str, AccountTier] = {
-    "exdb_free_": AccountTier.REGISTERED,
-    "exdb_solo_": AccountTier.SOLO,
-    "exdb_team_": AccountTier.TEAM,
-    "exdb_ent_": AccountTier.ENTERPRISE,
+    "stdb_free_": AccountTier.REGISTERED,
+    "stdb_solo_": AccountTier.SOLO,
+    "stdb_team_": AccountTier.TEAM,
+    "stdb_ent_": AccountTier.ENTERPRISE,
 }
 
 
 def generate_token(tier: AccountTier = AccountTier.REGISTERED) -> str:
-    """Generate a new opaque token. Format: exdb_{tier}_{40 hex chars}."""
+    """Generate a new opaque token. Format: stdb_{tier}_{40 hex chars}. (SteinDB token prefix)"""
     prefix = {
-        AccountTier.REGISTERED: "exdb_free_",
-        AccountTier.SOLO: "exdb_solo_",
-        AccountTier.TEAM: "exdb_team_",
-        AccountTier.ENTERPRISE: "exdb_ent_",
+        AccountTier.REGISTERED: "stdb_free_",
+        AccountTier.SOLO: "stdb_solo_",
+        AccountTier.TEAM: "stdb_team_",
+        AccountTier.ENTERPRISE: "stdb_ent_",
     }[tier]
     return prefix + secrets.token_hex(20)
 
