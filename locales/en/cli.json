@@ -1,0 +1,53 @@
+{
+  "commands": {
+    "scan": {
+      "help": "Scan Oracle/PostgreSQL schema and generate migration readiness report",
+      "scanning": "Scanning {file}...",
+      "found_objects": "Found {count} objects",
+      "complexity": "Complexity: {score}/10",
+      "complete": "Scan complete in {seconds}s"
+    },
+    "convert": {
+      "help": "Convert Oracle SQL/PL-SQL to PostgreSQL (or reverse)",
+      "converting": "Converting {count} objects...",
+      "rules_only": "Using rules-only mode (90% coverage)",
+      "ai_required": "AI-assisted conversion requires registration (free).\nRegister: stein auth register --email you@company.com\nOr use rules-only: stein convert myfile.sql",
+      "complete": "Converted {converted}/{total} objects",
+      "forwarded": "{count} objects forwarded to AI"
+    },
+    "verify": {
+      "help": "Verify converted PostgreSQL/Oracle output for correctness",
+      "verifying": "Verifying {count} files...",
+      "green": "GREEN — high confidence",
+      "yellow": "YELLOW — review recommended",
+      "red": "RED — needs manual correction"
+    },
+    "auth": {
+      "register_help": "Register for a free SteinDB account",
+      "register_success": "Registered successfully!",
+      "register_prompt": "Email address",
+      "login_help": "Login with an existing token",
+      "logout_help": "Remove stored token",
+      "logout_success": "Logged out. Rules-only mode still works without a token.",
+      "status_help": "Show current authentication status",
+      "status_authenticated": "Authenticated",
+      "status_not_authenticated": "Not authenticated",
+      "upgrade_help": "Upgrade your account to a paid tier"
+    }
+  },
+  "errors": {
+    "file_not_found": "File not found: {path}",
+    "invalid_sql": "Invalid SQL input",
+    "connection_failed": "Connection failed: {error}",
+    "no_objects": "No objects found in input"
+  },
+  "report": {
+    "title": "SteinDB Migration Report",
+    "summary": "Summary",
+    "total_objects": "Total Objects",
+    "auto_convertible": "Auto-convertible",
+    "needs_ai": "Needs AI assistance",
+    "complexity_avg": "Average Complexity",
+    "savings_estimate": "Estimated Savings"
+  }
+}

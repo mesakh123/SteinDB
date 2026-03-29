@@ -1,0 +1,124 @@
+# =============================================================================
+# SteinDB Golden Tests — Identifiers, Case Sensitivity & Schema Architecture
+# From issues.md Section 2: Case folding, GTTs, packages, variables
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# CASE SENSITIVITY / IDENTIFIER FOLDING
+# ---------------------------------------------------------------------------
+
+- name: uppercase_identifier_folding
+  category: edge_cases
+  oracle: "CREATE TABLE MY_TABLE (MY_COLUMN NUMBER(9))"
+  expected_postgresql: "CREATE TABLE my_table (my_column INTEGER)"
+  complexity: 3
+  constructs: ["IDENTIFIER_CASE", "NUMBER"]
+  tags: ["identifiers", "case_folding", "section2"]
+  acceptance_criteria:
+    - "Oracle defaults to uppercase unquoted identifiers"
+    - "PostgreSQL defaults to lowercase unquoted identifiers"
+    - "Convert all Oracle uppercase to lowercase during O2P"
+
+- name: quoted_identifier_preservation
+  category: edge_cases
+  oracle: 'CREATE TABLE "MY_TABLE" ("My Column" VARCHAR2(100))'
+  expected_postgresql: 'CREATE TABLE "MY_TABLE" ("My Column" VARCHAR(100))'
+  complexity: 4
+  constructs: ["IDENTIFIER_QUOTED", "VARCHAR2"]
+  tags: ["identifiers", "case_folding", "section2"]
+  acceptance_criteria:
+    - "Quoted identifiers must be preserved exactly as-is"
+    - "WARNING: all queries must now quote these names exactly"
+    - "Recommend converting to lowercase if possible"
+
+# ---------------------------------------------------------------------------
+# GLOBAL TEMPORARY TABLE
+# ---------------------------------------------------------------------------
+
+- name: global_temp_table_to_temp
+  category: edge_cases
+  oracle: >-
+    CREATE GLOBAL TEMPORARY TABLE session_data (
+      session_id NUMBER(9),
+      data_key VARCHAR2(100),
+      data_value VARCHAR2(4000)
+    ) ON COMMIT DELETE ROWS
+  expected_postgresql: >-
+    CREATE TEMPORARY TABLE session_data (
+      session_id INTEGER,
+      data_key VARCHAR(100),
+      data_value VARCHAR(4000)
+    ) ON COMMIT DELETE ROWS
+  complexity: 5
+  constructs: ["GLOBAL_TEMPORARY_TABLE", "NUMBER", "VARCHAR2"]
+  tags: ["identifiers", "gtt", "section2"]
+  acceptance_criteria:
+    - "Oracle GTT definition is persistent; only data is session-local"
+    - "PG TEMPORARY TABLE structure is dropped when session ends"
+    - "WARNING: app code assuming GTT always exists will fail in PG"
+    - "Consider UNLOGGED table with session-ID column as alternative"
+
+- name: global_temp_table_preserve_rows
+  category: edge_cases
+  oracle: >-
+    CREATE GLOBAL TEMPORARY TABLE batch_results (
+      batch_id NUMBER(9),
+      result CLOB
+    ) ON COMMIT PRESERVE ROWS
+  expected_postgresql: >-
+    CREATE TEMPORARY TABLE batch_results (
+      batch_id INTEGER,
+      result TEXT
+    ) ON COMMIT PRESERVE ROWS
+  complexity: 5
+  constructs: ["GLOBAL_TEMPORARY_TABLE", "NUMBER", "CLOB"]
+  tags: ["identifiers", "gtt", "section2"]
+
+# ---------------------------------------------------------------------------
+# PACKAGE VARIABLE → current_setting / set_config
+# ---------------------------------------------------------------------------
+
+- name: package_variable_to_set_config
+  category: edge_cases
+  oracle: >-
+    CREATE OR REPLACE PACKAGE pkg_config AS
+      g_debug_mode NUMBER(1) := 0;
+    END pkg_config;
+  expected_postgresql: >-
+    SELECT set_config('pkg_config.g_debug_mode', '0', false)
+  complexity: 7
+  constructs: ["PACKAGE", "PACKAGE_VARIABLE"]
+  tags: ["identifiers", "packages", "session_state", "section2"]
+  acceptance_criteria:
+    - "Oracle package-level variables persist for the session"
+    - "PG has no packages; use set_config/current_setting for session state"
+    - "set_config(name, value, is_local) — false means session-scoped"
+
+# ---------------------------------------------------------------------------
+# VARIABLE NAME MASKING (plpgsql.variable_conflict)
+# ---------------------------------------------------------------------------
+
+- name: variable_name_masking
+  category: edge_cases
+  oracle: >-
+    CREATE OR REPLACE PROCEDURE update_salary(department_id NUMBER) IS
+    BEGIN
+      UPDATE employees SET salary = salary * 1.1
+      WHERE department_id = department_id;
+    END;
+  expected_postgresql: >-
+    CREATE OR REPLACE FUNCTION update_salary(p_department_id INTEGER)
+    RETURNS VOID AS $$
+    BEGIN
+      UPDATE employees SET salary = salary * 1.1
+      WHERE department_id = p_department_id;
+    END;
+    $$ LANGUAGE plpgsql
+  complexity: 5
+  constructs: ["PROCEDURE", "VARIABLE_MASKING", "NUMBER"]
+  tags: ["identifiers", "variable_conflict", "section2"]
+  acceptance_criteria:
+    - "Oracle: column name takes precedence over variable name"
+    - "PG: throws ambiguous name error"
+    - "Prefix variables with p_ or v_ to avoid conflict"
+    - "Alternative: SET plpgsql.variable_conflict = use_column"

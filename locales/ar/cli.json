@@ -1,0 +1,53 @@
+{
+  "commands": {
+    "scan": {
+      "help": "فحص مخطط Oracle/PostgreSQL وإنشاء تقرير جاهزية الترحيل",
+      "scanning": "جارٍ فحص {file}...",
+      "found_objects": "تم العثور على {count} كائن",
+      "complexity": "التعقيد: {score}/10",
+      "complete": "اكتمل الفحص في {seconds} ثانية"
+    },
+    "convert": {
+      "help": "تحويل Oracle SQL/PL-SQL إلى PostgreSQL (أو العكس)",
+      "converting": "جارٍ تحويل {count} كائن...",
+      "rules_only": "استخدام وضع القواعد فقط (تغطية 90%)",
+      "ai_required": "التحويل بمساعدة الذكاء الاصطناعي يتطلب التسجيل (مجاني).\nالتسجيل: stein auth register --email you@company.com\nأو استخدم وضع القواعد فقط: stein convert myfile.sql",
+      "complete": "تم تحويل {converted}/{total} كائن",
+      "forwarded": "تم إحالة {count} كائن إلى الذكاء الاصطناعي"
+    },
+    "verify": {
+      "help": "التحقق من صحة مخرجات PostgreSQL/Oracle المحولة",
+      "verifying": "جارٍ التحقق من {count} ملف...",
+      "green": "أخضر — ثقة عالية",
+      "yellow": "أصفر — يُنصح بالمراجعة",
+      "red": "أحمر — يحتاج تصحيح يدوي"
+    },
+    "auth": {
+      "register_help": "تسجيل حساب SteinDB مجاني",
+      "register_success": "تم التسجيل بنجاح!",
+      "register_prompt": "عنوان البريد الإلكتروني",
+      "login_help": "تسجيل الدخول باستخدام رمز موجود",
+      "logout_help": "إزالة الرمز المحفوظ",
+      "logout_success": "تم تسجيل الخروج. وضع القواعد فقط لا يزال يعمل بدون رمز.",
+      "status_help": "عرض حالة المصادقة الحالية",
+      "status_authenticated": "مصادق عليه",
+      "status_not_authenticated": "غير مصادق عليه",
+      "upgrade_help": "ترقية حسابك إلى خطة مدفوعة"
+    }
+  },
+  "errors": {
+    "file_not_found": "الملف غير موجود: {path}",
+    "invalid_sql": "إدخال SQL غير صالح",
+    "connection_failed": "فشل الاتصال: {error}",
+    "no_objects": "لم يتم العثور على كائنات في الإدخال"
+  },
+  "report": {
+    "title": "تقرير ترحيل SteinDB",
+    "summary": "ملخص",
+    "total_objects": "إجمالي الكائنات",
+    "auto_convertible": "قابل للتحويل تلقائياً",
+    "needs_ai": "يحتاج مساعدة الذكاء الاصطناعي",
+    "complexity_avg": "متوسط التعقيد",
+    "savings_estimate": "التوفير المقدر"
+  }
+}

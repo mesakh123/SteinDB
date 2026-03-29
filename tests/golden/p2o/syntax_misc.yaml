@@ -1,0 +1,358 @@
+# =============================================================================
+# SteinDB Golden Tests — P2O Miscellaneous Syntax Conversions
+# PostgreSQL SQL syntax → Oracle SQL syntax
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# LIMIT / OFFSET
+# ---------------------------------------------------------------------------
+
+- name: limit_to_rownum
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT * FROM orders LIMIT 10"
+  expected: "SELECT * FROM orders WHERE ROWNUM <= 10"
+  constructs: ["LIMIT"]
+  tags: ["syntax", "pagination", "p2o"]
+
+- name: limit_offset_to_rownum_subquery
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT * FROM orders ORDER BY id LIMIT 10 OFFSET 20"
+  expected: >-
+    SELECT * FROM (
+      SELECT a.*, ROWNUM rnum FROM (
+        SELECT * FROM orders ORDER BY id
+      ) a WHERE ROWNUM <= 30
+    ) WHERE rnum > 20
+  constructs: ["LIMIT", "OFFSET"]
+  tags: ["syntax", "pagination", "p2o"]
+
+# ---------------------------------------------------------------------------
+# SET OPERATIONS
+# ---------------------------------------------------------------------------
+
+- name: except_to_minus
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: >-
+    SELECT id FROM all_users EXCEPT SELECT id FROM banned_users
+  expected: >-
+    SELECT id FROM all_users MINUS SELECT id FROM banned_users
+  constructs: ["EXCEPT"]
+  tags: ["syntax", "set_ops", "p2o"]
+
+- name: except_all_to_minus_workaround
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: >-
+    SELECT id FROM table_a EXCEPT ALL SELECT id FROM table_b
+  expected: >-
+    SELECT id FROM (
+      SELECT id, ROW_NUMBER() OVER (PARTITION BY id ORDER BY id) AS rn FROM table_a
+    ) a WHERE NOT EXISTS (
+      SELECT 1 FROM (
+        SELECT id, ROW_NUMBER() OVER (PARTITION BY id ORDER BY id) AS rn FROM table_b
+      ) b WHERE a.id = b.id AND a.rn = b.rn
+    )
+  constructs: ["EXCEPT ALL"]
+  tags: ["syntax", "set_ops", "p2o"]
+  acceptance_criteria:
+    - "EXCEPT ALL preserves duplicates; Oracle MINUS does not"
+    - "Requires ROW_NUMBER workaround to handle duplicate counting"
+
+# ---------------------------------------------------------------------------
+# DUAL / FROM CLAUSE
+# ---------------------------------------------------------------------------
+
+- name: select_no_from_to_dual
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT 1"
+  expected: "SELECT 1 FROM DUAL"
+  constructs: ["SELECT"]
+  tags: ["syntax", "dual", "p2o"]
+
+- name: current_user_to_user
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT CURRENT_USER"
+  expected: "SELECT USER FROM DUAL"
+  constructs: ["CURRENT_USER"]
+  tags: ["syntax", "session", "p2o"]
+
+# ---------------------------------------------------------------------------
+# ROW GENERATION
+# ---------------------------------------------------------------------------
+
+- name: generate_series_to_connect_by
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT * FROM generate_series(1, 10)"
+  expected: "SELECT LEVEL FROM DUAL CONNECT BY LEVEL <= 10"
+  constructs: ["generate_series"]
+  tags: ["syntax", "row_generation", "p2o"]
+
+# ---------------------------------------------------------------------------
+# UPSERT / MERGE
+# ---------------------------------------------------------------------------
+
+- name: on_conflict_do_update_to_merge
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: >-
+    INSERT INTO config (key, value)
+    VALUES ('mode', 'dark')
+    ON CONFLICT (key)
+    DO UPDATE SET value = EXCLUDED.value
+  expected: >-
+    MERGE INTO config tgt
+    USING (SELECT 'mode' AS key, 'dark' AS value FROM DUAL) src
+    ON (tgt.key = src.key)
+    WHEN MATCHED THEN UPDATE SET tgt.value = src.value
+    WHEN NOT MATCHED THEN INSERT (key, value) VALUES (src.key, src.value)
+  constructs: ["ON CONFLICT", "DO UPDATE"]
+  tags: ["syntax", "upsert", "p2o"]
+
+- name: on_conflict_do_nothing_to_merge_not_matched
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: >-
+    INSERT INTO users (email, name)
+    VALUES ('a@b.com', 'Alice')
+    ON CONFLICT (email) DO NOTHING
+  expected: >-
+    MERGE INTO users tgt
+    USING (SELECT 'a@b.com' AS email, 'Alice' AS name FROM DUAL) src
+    ON (tgt.email = src.email)
+    WHEN NOT MATCHED THEN INSERT (email, name) VALUES (src.email, src.name)
+  constructs: ["ON CONFLICT", "DO NOTHING"]
+  tags: ["syntax", "upsert", "p2o"]
+
+# ---------------------------------------------------------------------------
+# RETURNING / LOCKING
+# ---------------------------------------------------------------------------
+
+- name: returning_to_returning_into
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "INSERT INTO items (name) VALUES ('Widget') RETURNING id"
+  expected: >-
+    INSERT INTO items (name) VALUES ('Widget')
+    RETURNING id INTO v_id
+  constructs: ["RETURNING"]
+  tags: ["syntax", "returning", "p2o"]
+
+- name: for_update_nowait_same
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT * FROM accounts WHERE id = 1 FOR UPDATE NOWAIT"
+  expected: "SELECT * FROM accounts WHERE id = 1 FOR UPDATE NOWAIT"
+  constructs: ["FOR UPDATE NOWAIT"]
+  tags: ["syntax", "locking", "p2o"]
+
+# ---------------------------------------------------------------------------
+# MODERN SQL FEATURES
+# ---------------------------------------------------------------------------
+
+- name: fetch_first_rows_same
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT * FROM orders ORDER BY total DESC FETCH FIRST 5 ROWS ONLY"
+  expected: "SELECT * FROM orders ORDER BY total DESC FETCH FIRST 5 ROWS ONLY"
+  constructs: ["FETCH FIRST"]
+  tags: ["syntax", "pagination", "p2o"]
+  acceptance_criteria:
+    - "FETCH FIRST n ROWS ONLY is ANSI SQL supported in both PG and Oracle 12c+"
+
+- name: tablesample_to_sample
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT * FROM large_table TABLESAMPLE BERNOULLI(10)"
+  expected: "SELECT * FROM large_table SAMPLE(10)"
+  constructs: ["TABLESAMPLE"]
+  tags: ["syntax", "sampling", "p2o"]
+
+# ---------------------------------------------------------------------------
+# LATERAL / RECURSIVE
+# ---------------------------------------------------------------------------
+
+- name: lateral_join_to_subquery
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: >-
+    SELECT d.name, e.max_sal
+    FROM departments d
+    LEFT JOIN LATERAL (
+      SELECT MAX(salary) AS max_sal FROM employees WHERE department_id = d.id
+    ) e ON TRUE
+  expected: >-
+    SELECT d.name,
+      (SELECT MAX(salary) FROM employees WHERE department_id = d.id) AS max_sal
+    FROM departments d
+  constructs: ["LATERAL"]
+  tags: ["syntax", "joins", "p2o"]
+
+- name: with_recursive_to_connect_by
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: >-
+    WITH RECURSIVE tree AS (
+      SELECT id, name, parent_id, 1 AS depth
+      FROM categories WHERE parent_id IS NULL
+      UNION ALL
+      SELECT c.id, c.name, c.parent_id, t.depth + 1
+      FROM categories c JOIN tree t ON c.parent_id = t.id
+    )
+    SELECT * FROM tree
+  expected: >-
+    SELECT id, name, parent_id, LEVEL AS depth
+    FROM categories
+    START WITH parent_id IS NULL
+    CONNECT BY PRIOR id = parent_id
+  constructs: ["WITH RECURSIVE"]
+  tags: ["syntax", "hierarchical", "p2o"]
+
+# ---------------------------------------------------------------------------
+# ADDITIONAL SYNTAX CONVERSIONS
+# ---------------------------------------------------------------------------
+
+- name: ilike_to_upper_like
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT * FROM users WHERE name ILIKE '%smith%'"
+  expected: "SELECT * FROM users WHERE UPPER(name) LIKE UPPER('%smith%')"
+  constructs: ["ILIKE"]
+  tags: ["syntax", "string", "p2o"]
+
+- name: type_cast_double_colon_to_cast
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT '2024-01-01'::DATE, '42'::INTEGER, amount::NUMERIC(10,2)"
+  expected: >-
+    SELECT CAST('2024-01-01' AS DATE),
+      CAST('42' AS NUMBER(10)),
+      CAST(amount AS NUMBER(10,2))
+    FROM DUAL
+  constructs: ["::"]
+  tags: ["syntax", "casting", "p2o"]
+  acceptance_criteria:
+    - "PG :: cast operator has no Oracle equivalent"
+    - "Must convert to standard CAST() or TO_xxx() functions"
+
+- name: true_false_literals_to_numbers
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "UPDATE users SET is_active = TRUE WHERE id = 1"
+  expected: "UPDATE users SET is_active = 1 WHERE id = 1"
+  constructs: ["BOOLEAN", "TRUE"]
+  tags: ["syntax", "boolean", "p2o"]
+
+- name: false_literal_to_zero
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "UPDATE users SET is_deleted = FALSE WHERE id = 1"
+  expected: "UPDATE users SET is_deleted = 0 WHERE id = 1"
+  constructs: ["BOOLEAN", "FALSE"]
+  tags: ["syntax", "boolean", "p2o"]
+
+- name: string_concatenation_pipe_same
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT first_name || ' ' || last_name AS full_name FROM employees"
+  expected: "SELECT first_name || ' ' || last_name AS full_name FROM employees"
+  constructs: ["||"]
+  tags: ["syntax", "string", "p2o"]
+
+- name: is_distinct_from_to_decode
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: "SELECT * FROM t WHERE a IS DISTINCT FROM b"
+  expected: "SELECT * FROM t WHERE DECODE(a, b, 0, 1) = 1"
+  constructs: ["IS DISTINCT FROM"]
+  tags: ["syntax", "null_handling", "p2o"]
+  acceptance_criteria:
+    - "PG IS DISTINCT FROM treats NULLs as comparable values"
+    - "Oracle DECODE handles NULL comparison natively"
+
+- name: do_block_to_anonymous_plsql
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: >-
+    DO $$
+    BEGIN
+      RAISE NOTICE 'Hello world';
+    END;
+    $$
+  expected: >-
+    BEGIN
+      DBMS_OUTPUT.PUT_LINE('Hello world');
+    END;
+  constructs: ["DO"]
+  tags: ["syntax", "anonymous_block", "p2o"]
+
+- name: values_as_table_to_union_all
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: >-
+    SELECT * FROM (VALUES (1, 'a'), (2, 'b'), (3, 'c')) AS t(id, name)
+  expected: >-
+    SELECT 1 AS id, 'a' AS name FROM DUAL
+    UNION ALL SELECT 2, 'b' FROM DUAL
+    UNION ALL SELECT 3, 'c' FROM DUAL
+  constructs: ["VALUES"]
+  tags: ["syntax", "inline_table", "p2o"]
+
+- name: create_type_enum_to_check_constraint
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: >-
+    CREATE TYPE status_enum AS ENUM ('active', 'inactive', 'pending');
+    CREATE TABLE tickets (id SERIAL, status status_enum)
+  expected: >-
+    CREATE TABLE tickets (
+      id NUMBER(10) NOT NULL,
+      status VARCHAR2(20) CHECK (status IN ('active', 'inactive', 'pending'))
+    );
+    CREATE SEQUENCE tickets_id_seq START WITH 1;
+    CREATE OR REPLACE TRIGGER tickets_id_trg BEFORE INSERT ON tickets
+    FOR EACH ROW BEGIN :NEW.id := tickets_id_seq.NEXTVAL; END;
+  constructs: ["ENUM", "CREATE TYPE"]
+  tags: ["syntax", "enum", "p2o"]
+  acceptance_criteria:
+    - "PG ENUM types have no Oracle equivalent"
+    - "Convert to VARCHAR2 with CHECK constraint"
+
+- name: crosstab_to_pivot
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: >-
+    SELECT * FROM crosstab(
+      'SELECT dept, quarter, revenue FROM sales ORDER BY 1,2',
+      'SELECT DISTINCT quarter FROM sales ORDER BY 1'
+    ) AS ct(dept TEXT, q1 NUMERIC, q2 NUMERIC, q3 NUMERIC, q4 NUMERIC)
+  expected: >-
+    SELECT * FROM (
+      SELECT dept, quarter, revenue FROM sales
+    )
+    PIVOT (
+      SUM(revenue) FOR quarter IN ('Q1' AS q1, 'Q2' AS q2, 'Q3' AS q3, 'Q4' AS q4)
+    )
+  constructs: ["crosstab"]
+  tags: ["syntax", "pivot", "p2o"]
+
+- name: window_function_groups_mode
+  category: p2o_syntax
+  direction: pg_to_oracle
+  source: >-
+    SELECT id, val,
+      SUM(val) OVER (ORDER BY id GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+    FROM data
+  expected: >-
+    SELECT id, val,
+      SUM(val) OVER (ORDER BY id GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+    FROM data
+  constructs: ["GROUPS"]
+  tags: ["syntax", "window", "p2o"]
+  acceptance_criteria:
+    - "GROUPS window frame mode is supported in both PG and Oracle"

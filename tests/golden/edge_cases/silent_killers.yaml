@@ -1,0 +1,196 @@
+# =============================================================================
+# SteinDB Golden Tests — Silent Killers: Data Handling & Type Mismatches
+# From issues.md Section 1: Edge cases that compile but cause silent bugs
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# EMPTY STRING vs NULL
+# ---------------------------------------------------------------------------
+
+- name: empty_string_where_clause
+  category: edge_cases
+  oracle: "SELECT * FROM employees WHERE name = ''"
+  expected_postgresql: "SELECT * FROM employees WHERE name = '' OR name IS NULL"
+  complexity: 4
+  constructs: ["NULL_EMPTY_STRING"]
+  tags: ["silent_killer", "null_semantics", "section1"]
+  acceptance_criteria:
+    - "Oracle treats '' as NULL so WHERE col = '' never matches"
+    - "PostgreSQL must check both '' and NULL to preserve Oracle semantics"
+
+- name: string_concat_with_null_operand
+  category: edge_cases
+  oracle: "SELECT 'A' || NULL FROM DUAL"
+  expected_postgresql: "SELECT concat('A', NULL)"
+  complexity: 3
+  constructs: ["NULL_CONCAT", "DUAL"]
+  tags: ["silent_killer", "null_semantics", "section1"]
+  acceptance_criteria:
+    - "Oracle concatenation with NULL yields 'A'; PG || yields NULL"
+    - "Must use concat() which treats NULL as empty string"
+
+- name: unique_constraint_null_vs_empty_string
+  category: edge_cases
+  oracle: >-
+    CREATE TABLE t (
+      code VARCHAR2(10),
+      CONSTRAINT uq_code UNIQUE (code)
+    )
+  expected_postgresql: >-
+    CREATE TABLE t (
+      code VARCHAR(10),
+      CONSTRAINT uq_code UNIQUE (code)
+    )
+  complexity: 5
+  constructs: ["VARCHAR2", "UNIQUE_CONSTRAINT", "NULL_EMPTY_STRING"]
+  tags: ["silent_killer", "null_semantics", "section1"]
+  acceptance_criteria:
+    - "Oracle allows multiple NULL (empty string) rows under UNIQUE"
+    - "PG allows multiple NULLs but blocks multiple '' empty strings"
+    - "WARNING: unique constraint behavior differs for empty strings"
+
+# ---------------------------------------------------------------------------
+# DATE WITH TIME → TIMESTAMP(0)
+# ---------------------------------------------------------------------------
+
+- name: date_with_time_to_timestamp0
+  category: edge_cases
+  oracle: >-
+    CREATE TABLE events (
+      event_id NUMBER(9),
+      event_date DATE
+    )
+  expected_postgresql: >-
+    CREATE TABLE events (
+      event_id INTEGER,
+      event_date TIMESTAMP(0)
+    )
+  complexity: 3
+  constructs: ["DATE", "NUMBER"]
+  tags: ["silent_killer", "temporal", "section1"]
+  acceptance_criteria:
+    - "Oracle DATE stores date AND time (to seconds)"
+    - "Must use TIMESTAMP(0), not DATE, to preserve time component"
+    - "Using PG DATE would silently lose time data"
+
+- name: date_column_in_query
+  category: edge_cases
+  oracle: "SELECT order_id, order_date FROM orders WHERE order_date > SYSDATE - 7"
+  expected_postgresql: "SELECT order_id, order_date FROM orders WHERE order_date > CURRENT_TIMESTAMP - INTERVAL '7 days'"
+  complexity: 3
+  constructs: ["DATE", "SYSDATE", "DATE_ARITHMETIC"]
+  tags: ["silent_killer", "temporal", "section1"]
+
+# ---------------------------------------------------------------------------
+# TIMESTAMP WITH TIME ZONE DATA LOSS
+# ---------------------------------------------------------------------------
+
+- name: timestamp_with_tz_data_loss_warning
+  category: edge_cases
+  oracle: >-
+    CREATE TABLE audit_log (
+      log_id NUMBER(12),
+      event_time TIMESTAMP WITH TIME ZONE,
+      event_tz VARCHAR2(50)
+    )
+  expected_postgresql: >-
+    CREATE TABLE audit_log (
+      log_id BIGINT,
+      event_time TIMESTAMPTZ,
+      event_tz VARCHAR(50)
+    )
+  complexity: 5
+  constructs: ["TIMESTAMP WITH TIME ZONE", "NUMBER"]
+  tags: ["silent_killer", "temporal", "data_loss", "section1"]
+  acceptance_criteria:
+    - "WARNING: PostgreSQL TIMESTAMPTZ converts to UTC and drops original timezone"
+    - "Oracle stores actual timezone region/offset alongside timestamp"
+    - "If original timezone is needed, store it in a separate column"
+
+# ---------------------------------------------------------------------------
+# NUMBER(10,0) JOIN PERFORMANCE → INTEGER OPTIMIZATION
+# ---------------------------------------------------------------------------
+
+- name: number_join_performance_optimization
+  category: edge_cases
+  oracle: >-
+    CREATE TABLE orders (
+      order_id NUMBER(10,0),
+      customer_id NUMBER(10,0)
+    )
+  expected_postgresql: >-
+    CREATE TABLE orders (
+      order_id INTEGER,
+      customer_id INTEGER
+    )
+  complexity: 3
+  constructs: ["NUMBER"]
+  tags: ["silent_killer", "performance", "integer_optimization", "section1"]
+  acceptance_criteria:
+    - "NUMBER(10,0) must map to INTEGER, not NUMERIC(10,0)"
+    - "Joining on NUMERIC is computationally expensive in PG"
+    - "INTEGER join performance is orders of magnitude better"
+
+# ---------------------------------------------------------------------------
+# VARCHAR2 BYTE vs CHAR SEMANTICS
+# ---------------------------------------------------------------------------
+
+- name: varchar2_byte_semantics
+  category: edge_cases
+  oracle: "CREATE TABLE t (name VARCHAR2(50 BYTE))"
+  expected_postgresql: "CREATE TABLE t (name VARCHAR(50))"
+  complexity: 4
+  constructs: ["VARCHAR2", "BYTE_SEMANTICS"]
+  tags: ["silent_killer", "string", "section1"]
+  acceptance_criteria:
+    - "WARNING: Oracle VARCHAR2(50 BYTE) limits to 50 bytes, not characters"
+    - "PG VARCHAR(50) limits to 50 characters"
+    - "Multi-byte UTF-8 characters may cause data truncation differences"
+
+- name: varchar2_char_semantics
+  category: edge_cases
+  oracle: "CREATE TABLE t (name VARCHAR2(50 CHAR))"
+  expected_postgresql: "CREATE TABLE t (name VARCHAR(50))"
+  complexity: 2
+  constructs: ["VARCHAR2", "CHAR_SEMANTICS"]
+  tags: ["silent_killer", "string", "section1"]
+  acceptance_criteria:
+    - "VARCHAR2(50 CHAR) maps cleanly to VARCHAR(50) — both count characters"
+
+# ---------------------------------------------------------------------------
+# BOOLEAN ↔ NUMBER(1)
+# ---------------------------------------------------------------------------
+
+- name: boolean_number1_reverse
+  category: edge_cases
+  oracle: >-
+    CREATE TABLE t (
+      is_active NUMBER(1) CHECK (is_active IN (0, 1))
+    )
+  expected_postgresql: >-
+    CREATE TABLE t (
+      is_active BOOLEAN
+    )
+  complexity: 3
+  constructs: ["NUMBER", "BOOLEAN", "CHECK_CONSTRAINT"]
+  tags: ["silent_killer", "boolean", "section1"]
+  acceptance_criteria:
+    - "Oracle NUMBER(1) with 0/1 check constraint maps to PG BOOLEAN"
+    - "CHECK constraint is unnecessary with native BOOLEAN type"
+
+# ---------------------------------------------------------------------------
+# ROWID → ctid WARNING
+# ---------------------------------------------------------------------------
+
+- name: rowid_to_ctid_warning
+  category: edge_cases
+  oracle: "SELECT ROWID, name FROM employees WHERE department_id = 10"
+  expected_postgresql: "SELECT ctid, name FROM employees WHERE department_id = 10"
+  complexity: 6
+  constructs: ["ROWID"]
+  tags: ["silent_killer", "physical_pointer", "section1"]
+  acceptance_criteria:
+    - "WARNING: ctid is volatile in PostgreSQL — changes after UPDATE or VACUUM"
+    - "Oracle ROWID is stable for the lifetime of the row"
+    - "Do NOT use ctid for pagination or point lookups in application code"
+    - "Consider using a primary key or unique identifier instead"

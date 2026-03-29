@@ -1,0 +1,202 @@
+# =============================================================================
+# SteinDB Golden Tests — Advanced DDL Patterns
+# CTAS, COMMENT, RENAME, MERGE, global temp tables, VARCHAR2 semantics, etc.
+# =============================================================================
+
+- name: ctas_basic
+  category: ddl
+  oracle: "CREATE TABLE emp_backup AS SELECT * FROM employees"
+  expected_postgresql: "CREATE TABLE emp_backup AS SELECT * FROM employees"
+  constructs: ["CTAS"]
+  tags: ["no_change"]
+
+- name: ctas_with_where
+  category: ddl
+  oracle: "CREATE TABLE active_emp AS SELECT id, name FROM employees WHERE status = 'ACTIVE'"
+  expected_postgresql: "CREATE TABLE active_emp AS SELECT id, name FROM employees WHERE status = 'ACTIVE'"
+  constructs: ["CTAS"]
+  tags: ["no_change"]
+
+- name: ctas_nologging_parallel
+  category: ddl
+  oracle: "CREATE TABLE emp_copy NOLOGGING PARALLEL 4 AS SELECT * FROM employees"
+  expected_postgresql: "CREATE TABLE emp_copy AS SELECT * FROM employees"
+  constructs: ["CTAS", "NOLOGGING", "PARALLEL"]
+  tags: ["physical_removal"]
+
+- name: comment_on_table
+  category: ddl
+  oracle: "COMMENT ON TABLE employees IS 'Employee master table'"
+  expected_postgresql: "COMMENT ON TABLE employees IS 'Employee master table'"
+  constructs: ["COMMENT ON TABLE"]
+  tags: ["no_change"]
+
+- name: comment_on_column
+  category: ddl
+  oracle: "COMMENT ON COLUMN employees.salary IS 'Annual salary in USD'"
+  expected_postgresql: "COMMENT ON COLUMN employees.salary IS 'Annual salary in USD'"
+  constructs: ["COMMENT ON COLUMN"]
+  tags: ["no_change"]
+
+- name: rename_table
+  category: ddl
+  oracle: "RENAME employees TO staff"
+  expected_postgresql: "ALTER TABLE employees RENAME TO staff"
+  constructs: ["RENAME"]
+
+- name: merge_upsert
+  category: ddl
+  oracle: |
+    MERGE INTO target t
+    USING source s ON (t.id = s.id)
+    WHEN MATCHED THEN UPDATE SET t.name = s.name, t.value = s.value
+    WHEN NOT MATCHED THEN INSERT (id, name, value) VALUES (s.id, s.name, s.value)
+  expected_postgresql: |
+    INSERT INTO target (id, name, value)
+    SELECT s.id, s.name, s.value FROM source s
+    ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, value = EXCLUDED.value
+  complexity: 5
+  constructs: ["MERGE", "UPSERT"]
+
+- name: merge_delete
+  category: ddl
+  oracle: |
+    MERGE INTO target t
+    USING source s ON (t.id = s.id)
+    WHEN MATCHED THEN UPDATE SET t.name = s.name
+    DELETE WHERE t.status = 'INACTIVE'
+    WHEN NOT MATCHED THEN INSERT (id, name) VALUES (s.id, s.name)
+  expected_postgresql: |
+    INSERT INTO target (id, name)
+    SELECT s.id, s.name FROM source s
+    ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
+    DELETE FROM target WHERE status = 'INACTIVE' AND id IN (SELECT id FROM source)
+  complexity: 7
+  constructs: ["MERGE", "DELETE"]
+  tags: ["manual_review"]
+
+- name: global_temp_table_on_commit_delete
+  category: ddl
+  oracle: |
+    CREATE GLOBAL TEMPORARY TABLE temp_results (
+      id NUMBER(10),
+      result VARCHAR2(100)
+    ) ON COMMIT DELETE ROWS
+  expected_postgresql: |
+    CREATE TEMP TABLE temp_results (
+      id INTEGER,
+      result VARCHAR(100)
+    ) ON COMMIT DELETE ROWS
+  complexity: 3
+  constructs: ["GLOBAL TEMPORARY TABLE"]
+
+- name: global_temp_table_on_commit_preserve
+  category: ddl
+  oracle: |
+    CREATE GLOBAL TEMPORARY TABLE session_data (
+      session_id VARCHAR2(64),
+      payload CLOB
+    ) ON COMMIT PRESERVE ROWS
+  expected_postgresql: |
+    CREATE TEMP TABLE session_data (
+      session_id VARCHAR(64),
+      payload TEXT
+    ) ON COMMIT PRESERVE ROWS
+  complexity: 3
+  constructs: ["GLOBAL TEMPORARY TABLE", "PRESERVE ROWS"]
+
+- name: varchar2_byte_semantics
+  category: ddl
+  oracle: "CREATE TABLE t (name VARCHAR2(100 BYTE))"
+  expected_postgresql: "CREATE TABLE t (name VARCHAR(100))"
+  constructs: ["VARCHAR2", "BYTE"]
+  tags: ["byte_semantics"]
+
+- name: varchar2_char_semantics
+  category: ddl
+  oracle: "CREATE TABLE t (name VARCHAR2(100 CHAR))"
+  expected_postgresql: "CREATE TABLE t (name VARCHAR(100))"
+  constructs: ["VARCHAR2", "CHAR"]
+  tags: ["char_semantics"]
+
+- name: create_table_check_constraint
+  category: ddl
+  oracle: "CREATE TABLE orders (id NUMBER(10), status VARCHAR2(20), CONSTRAINT chk_status CHECK (status IN ('PENDING', 'ACTIVE', 'CLOSED')))"
+  expected_postgresql: "CREATE TABLE orders (id INTEGER, status VARCHAR(20), CONSTRAINT chk_status CHECK (status IN ('PENDING', 'ACTIVE', 'CLOSED')))"
+  constructs: ["CHECK"]
+
+- name: create_table_foreign_key
+  category: ddl
+  oracle: |
+    CREATE TABLE order_items (
+      id NUMBER(10) NOT NULL,
+      order_id NUMBER(10),
+      product_id NUMBER(10),
+      CONSTRAINT fk_order FOREIGN KEY (order_id) REFERENCES orders (id),
+      CONSTRAINT fk_product FOREIGN KEY (product_id) REFERENCES products (id)
+    )
+  expected_postgresql: |
+    CREATE TABLE order_items (
+      id INTEGER NOT NULL,
+      order_id INTEGER,
+      product_id INTEGER,
+      CONSTRAINT fk_order FOREIGN KEY (order_id) REFERENCES orders (id),
+      CONSTRAINT fk_product FOREIGN KEY (product_id) REFERENCES products (id)
+    )
+  constructs: ["FOREIGN KEY"]
+
+- name: alter_table_rename_column
+  category: ddl
+  oracle: "ALTER TABLE employees RENAME COLUMN emp_name TO full_name"
+  expected_postgresql: "ALTER TABLE employees RENAME COLUMN emp_name TO full_name"
+  constructs: ["ALTER TABLE", "RENAME COLUMN"]
+  tags: ["no_change"]
+
+- name: create_table_enable_disable_constraint
+  category: ddl
+  oracle: "ALTER TABLE employees ENABLE CONSTRAINT pk_emp"
+  expected_postgresql: "ALTER TABLE employees VALIDATE CONSTRAINT pk_emp"
+  constructs: ["ENABLE CONSTRAINT"]
+
+- name: alter_table_disable_constraint
+  category: ddl
+  oracle: "ALTER TABLE employees DISABLE CONSTRAINT pk_emp"
+  expected_postgresql: "ALTER TABLE employees ALTER CONSTRAINT pk_emp NOT VALID"
+  constructs: ["DISABLE CONSTRAINT"]
+  tags: ["manual_review"]
+
+- name: create_table_default_sysdate
+  category: ddl
+  oracle: "CREATE TABLE logs (id NUMBER(10), created_at DATE DEFAULT SYSDATE, message VARCHAR2(4000))"
+  expected_postgresql: "CREATE TABLE logs (id INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, message VARCHAR(4000))"
+  constructs: ["DEFAULT", "SYSDATE"]
+
+- name: create_table_multiple_indexes
+  category: ddl
+  oracle: |
+    CREATE TABLE customers (
+      id NUMBER(10) NOT NULL,
+      email VARCHAR2(255),
+      phone VARCHAR2(20),
+      CONSTRAINT pk_cust PRIMARY KEY (id)
+    );
+    CREATE INDEX idx_cust_email ON customers (email) TABLESPACE idx_ts;
+    CREATE INDEX idx_cust_phone ON customers (phone) TABLESPACE idx_ts;
+  expected_postgresql: |
+    CREATE TABLE customers (
+      id INTEGER NOT NULL,
+      email VARCHAR(255),
+      phone VARCHAR(20),
+      CONSTRAINT pk_cust PRIMARY KEY (id)
+    );
+    CREATE INDEX idx_cust_email ON customers (email);
+    CREATE INDEX idx_cust_phone ON customers (phone);
+  constructs: ["CREATE TABLE", "CREATE INDEX", "TABLESPACE"]
+  tags: ["tablespace_removal"]
+
+- name: truncate_table
+  category: ddl
+  oracle: "TRUNCATE TABLE temp_data"
+  expected_postgresql: "TRUNCATE TABLE temp_data"
+  constructs: ["TRUNCATE"]
+  tags: ["no_change"]

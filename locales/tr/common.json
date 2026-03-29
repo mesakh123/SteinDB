@@ -1,0 +1,58 @@
+{
+  "app_name": "SteinDB",
+  "tagline": "Tek çift yönlü Oracle ↔ PostgreSQL geçiş aracı",
+  "directions": {
+    "o2p": "Oracle'dan PostgreSQL'e",
+    "p2o": "PostgreSQL'den Oracle'a"
+  },
+  "tiers": {
+    "free": "Ücretsiz",
+    "registered": "Kayıtlı",
+    "solo": "Solo",
+    "team": "Takım",
+    "enterprise": "Kurumsal"
+  },
+  "roles": {
+    "owner": "Sahip",
+    "admin": "Yönetici",
+    "member": "Üye",
+    "viewer": "İzleyici"
+  },
+  "actions": {
+    "save": "Kaydet",
+    "cancel": "İptal",
+    "delete": "Sil",
+    "edit": "Düzenle",
+    "create": "Oluştur",
+    "search": "Ara",
+    "filter": "Filtrele",
+    "export": "Dışa Aktar",
+    "download": "İndir",
+    "copy": "Kopyala",
+    "copied": "Kopyalandı!",
+    "loading": "Yükleniyor...",
+    "submit": "Gönder",
+    "confirm": "Onayla",
+    "back": "Geri",
+    "next": "İleri",
+    "upgrade": "Yükselt",
+    "register": "Kayıt Ol",
+    "login": "Giriş Yap",
+    "logout": "Çıkış Yap"
+  },
+  "status": {
+    "active": "Aktif",
+    "inactive": "Pasif",
+    "success": "Başarılı",
+    "failed": "Başarısız",
+    "partial": "Kısmi",
+    "pending": "Beklemede"
+  },
+  "time": {
+    "just_now": "az önce",
+    "minutes_ago": "{n} dakika önce",
+    "hours_ago": "{n} saat önce",
+    "days_ago": "{n} gün önce",
+    "yesterday": "dün"
+  }
+}

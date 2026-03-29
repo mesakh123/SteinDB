@@ -1,0 +1,77 @@
+- name: substr_function
+  category: functions
+  oracle: "SELECT SUBSTR(name, 1, 10) FROM employees"
+  expected_postgresql: "SELECT SUBSTRING(name FROM 1 FOR 10) FROM employees"
+  constructs: ["SUBSTR"]
+
+- name: to_char_date
+  category: functions
+  oracle: "SELECT TO_CHAR(hire_date, 'YYYY-MM-DD') FROM employees"
+  expected_postgresql: "SELECT TO_CHAR(hire_date, 'YYYY-MM-DD') FROM employees"
+  constructs: ["TO_CHAR"]
+  tags: ["no_change"]
+
+- name: to_number
+  category: functions
+  oracle: "SELECT TO_NUMBER('123.45') FROM DUAL"
+  expected_postgresql: "SELECT CAST('123.45' AS NUMERIC)"
+  constructs: ["TO_NUMBER", "DUAL"]
+
+- name: to_date
+  category: functions
+  oracle: "SELECT TO_DATE('2024-01-01', 'YYYY-MM-DD') FROM DUAL"
+  expected_postgresql: "SELECT TO_DATE('2024-01-01', 'YYYY-MM-DD')"
+  constructs: ["TO_DATE", "DUAL"]
+
+- name: instr_function
+  category: functions
+  oracle: "SELECT INSTR(name, 'a') FROM employees"
+  expected_postgresql: "SELECT POSITION('a' IN name) FROM employees"
+  constructs: ["INSTR"]
+
+- name: length_function
+  category: functions
+  oracle: "SELECT LENGTH(name) FROM employees"
+  expected_postgresql: "SELECT LENGTH(name) FROM employees"
+  constructs: ["LENGTH"]
+  tags: ["no_change"]
+
+- name: trunc_date
+  category: functions
+  oracle: "SELECT TRUNC(SYSDATE) FROM DUAL"
+  expected_postgresql: "SELECT DATE_TRUNC('day', CURRENT_TIMESTAMP)"
+  constructs: ["TRUNC", "SYSDATE", "DUAL"]
+
+- name: decode_multi_value
+  category: functions
+  oracle: "SELECT DECODE(status, 'A', 'Active', 'I', 'Inactive', 'D', 'Deleted', 'Unknown') FROM employees"
+  expected_postgresql: "SELECT CASE status WHEN 'A' THEN 'Active' WHEN 'I' THEN 'Inactive' WHEN 'D' THEN 'Deleted' ELSE 'Unknown' END FROM employees"
+  constructs: ["DECODE"]
+
+- name: least_function
+  category: functions
+  oracle: "SELECT LEAST(salary, commission, bonus) FROM employees"
+  expected_postgresql: "SELECT LEAST(salary, commission, bonus) FROM employees"
+  constructs: ["LEAST"]
+  tags: ["no_change"]
+
+- name: greatest_function
+  category: functions
+  oracle: "SELECT GREATEST(salary, commission, bonus) FROM employees"
+  expected_postgresql: "SELECT GREATEST(salary, commission, bonus) FROM employees"
+  constructs: ["GREATEST"]
+  tags: ["no_change"]
+
+- name: coalesce_function
+  category: functions
+  oracle: "SELECT COALESCE(commission, bonus, 0) FROM employees"
+  expected_postgresql: "SELECT COALESCE(commission, bonus, 0) FROM employees"
+  constructs: ["COALESCE"]
+  tags: ["no_change"]
+
+- name: nullif_function
+  category: functions
+  oracle: "SELECT NULLIF(salary, 0) FROM employees"
+  expected_postgresql: "SELECT NULLIF(salary, 0) FROM employees"
+  constructs: ["NULLIF"]
+  tags: ["no_change"]

@@ -1,0 +1,29 @@
+- name: dbms_output_put_line
+  category: dbms_packages
+  complexity: 2
+  constructs: ["DBMS_OUTPUT"]
+  oracle: |
+    BEGIN
+      DBMS_OUTPUT.PUT_LINE('Processing order: ' || v_order_id);
+    END;
+  expected_postgresql: |
+    BEGIN
+      RAISE NOTICE 'Processing order: %', v_order_id;
+    END;
+
+- name: dbms_output_in_procedure
+  category: dbms_packages
+  complexity: 4
+  constructs: ["DBMS_OUTPUT"]
+  oracle: |
+    CREATE OR REPLACE PROCEDURE log_status(p_msg VARCHAR2) IS
+    BEGIN
+      DBMS_OUTPUT.PUT_LINE(p_msg);
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE log_status(p_msg VARCHAR)
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      RAISE NOTICE '%', p_msg;
+    END;
+    $$;

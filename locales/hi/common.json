@@ -1,0 +1,58 @@
+{
+  "app_name": "SteinDB",
+  "tagline": "एकमात्र द्विदिशात्मक Oracle ↔ PostgreSQL माइग्रेशन टूल",
+  "directions": {
+    "o2p": "Oracle से PostgreSQL",
+    "p2o": "PostgreSQL से Oracle"
+  },
+  "tiers": {
+    "free": "निःशुल्क",
+    "registered": "पंजीकृत",
+    "solo": "सोलो",
+    "team": "टीम",
+    "enterprise": "एंटरप्राइज़"
+  },
+  "roles": {
+    "owner": "स्वामी",
+    "admin": "व्यवस्थापक",
+    "member": "सदस्य",
+    "viewer": "दर्शक"
+  },
+  "actions": {
+    "save": "सहेजें",
+    "cancel": "रद्द करें",
+    "delete": "हटाएं",
+    "edit": "संपादित करें",
+    "create": "बनाएं",
+    "search": "खोजें",
+    "filter": "फ़िल्टर",
+    "export": "निर्यात करें",
+    "download": "डाउनलोड करें",
+    "copy": "कॉपी करें",
+    "copied": "कॉपी हो गया!",
+    "loading": "लोड हो रहा है...",
+    "submit": "जमा करें",
+    "confirm": "पुष्टि करें",
+    "back": "वापस",
+    "next": "अगला",
+    "upgrade": "अपग्रेड करें",
+    "register": "पंजीकरण करें",
+    "login": "लॉगिन",
+    "logout": "लॉगआउट"
+  },
+  "status": {
+    "active": "सक्रिय",
+    "inactive": "निष्क्रिय",
+    "success": "सफल",
+    "failed": "विफल",
+    "partial": "आंशिक",
+    "pending": "लंबित"
+  },
+  "time": {
+    "just_now": "अभी",
+    "minutes_ago": "{n} मिनट पहले",
+    "hours_ago": "{n} घंटे पहले",
+    "days_ago": "{n} दिन पहले",
+    "yesterday": "कल"
+  }
+}

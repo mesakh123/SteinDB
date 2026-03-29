@@ -1,0 +1,241 @@
+# Golden tests: Oracle transaction semantics -> PostgreSQL equivalents
+# CRITICAL: Oracle implicit transactions vs PG autocommit, COMMIT in PL/SQL blocks
+
+- name: commit_in_plsql_block
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE transfer_funds(
+      p_from_acct NUMBER, p_to_acct NUMBER, p_amount NUMBER
+    ) IS
+    BEGIN
+      UPDATE accounts SET balance = balance - p_amount WHERE id = p_from_acct;
+      UPDATE accounts SET balance = balance + p_amount WHERE id = p_to_acct;
+      COMMIT;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE transfer_funds(
+      p_from_acct INTEGER, p_to_acct INTEGER, p_amount NUMERIC
+    )
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      UPDATE accounts SET balance = balance - p_amount WHERE id = p_from_acct;
+      UPDATE accounts SET balance = balance + p_amount WHERE id = p_to_acct;
+      COMMIT;
+    END;
+    $$;
+  complexity: 4
+  constructs: ["COMMIT", "PROCEDURE"]
+  tags: ["transaction_semantics", "pg11_required"]
+  acceptance_criteria:
+    - "COMMIT is only valid inside PROCEDURE, not FUNCTION (PG 11+)"
+    - "Oracle allows COMMIT in both; PG restricts to PROCEDURE"
+
+- name: savepoint_basic
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE batch_insert IS
+    BEGIN
+      SAVEPOINT before_batch;
+      INSERT INTO orders (id, status) VALUES (1, 'NEW');
+      INSERT INTO orders (id, status) VALUES (2, 'NEW');
+    EXCEPTION
+      WHEN OTHERS THEN
+        ROLLBACK TO before_batch;
+        RAISE;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE batch_insert()
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      SAVEPOINT before_batch;
+      INSERT INTO orders (id, status) VALUES (1, 'NEW');
+      INSERT INTO orders (id, status) VALUES (2, 'NEW');
+    EXCEPTION
+      WHEN OTHERS THEN
+        ROLLBACK TO SAVEPOINT before_batch;
+        RAISE;
+    END;
+    $$;
+  complexity: 4
+  constructs: ["SAVEPOINT", "ROLLBACK TO", "EXCEPTION"]
+  tags: ["transaction_semantics"]
+
+- name: rollback_to_savepoint
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE multi_step IS
+    BEGIN
+      INSERT INTO audit_log (msg) VALUES ('step1');
+      SAVEPOINT after_step1;
+      INSERT INTO audit_log (msg) VALUES ('step2');
+      SAVEPOINT after_step2;
+      INSERT INTO audit_log (msg) VALUES ('step3');
+      ROLLBACK TO after_step1;
+      COMMIT;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE multi_step()
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      INSERT INTO audit_log (msg) VALUES ('step1');
+      SAVEPOINT after_step1;
+      INSERT INTO audit_log (msg) VALUES ('step2');
+      SAVEPOINT after_step2;
+      INSERT INTO audit_log (msg) VALUES ('step3');
+      ROLLBACK TO SAVEPOINT after_step1;
+      COMMIT;
+    END;
+    $$;
+  complexity: 5
+  constructs: ["SAVEPOINT", "ROLLBACK TO", "COMMIT"]
+  tags: ["transaction_semantics"]
+
+- name: autonomous_transaction
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE log_error(p_msg VARCHAR2) IS
+      PRAGMA AUTONOMOUS_TRANSACTION;
+    BEGIN
+      INSERT INTO error_log (message, log_time) VALUES (p_msg, SYSDATE);
+      COMMIT;
+    END;
+  expected_postgresql: |
+    -- AUTONOMOUS_TRANSACTION requires dblink or restructuring.
+    -- This uses dblink to simulate an independent transaction.
+    CREATE OR REPLACE PROCEDURE log_error(p_msg VARCHAR)
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      PERFORM dblink_exec(
+        'dbname=' || current_database(),
+        'INSERT INTO error_log (message, log_time) VALUES (' ||
+        quote_literal(p_msg) || ', CURRENT_TIMESTAMP)'
+      );
+    END;
+    $$;
+  complexity: 9
+  constructs: ["AUTONOMOUS_TRANSACTION", "PRAGMA", "SYSDATE"]
+  tags: ["transaction_semantics", "requires_dblink", "high_complexity"]
+  acceptance_criteria:
+    - "PRAGMA AUTONOMOUS_TRANSACTION has no direct PG equivalent"
+    - "dblink_exec runs in a separate connection/transaction"
+    - "Alternative: restructure to avoid autonomous transaction entirely"
+
+- name: implicit_commit_on_ddl
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE setup_temp_table IS
+    BEGIN
+      INSERT INTO data_table (id) VALUES (1);
+      EXECUTE IMMEDIATE 'CREATE TABLE temp_work (id NUMBER)';
+      -- Oracle implicitly COMMITs here due to DDL
+      INSERT INTO data_table (id) VALUES (2);
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE setup_temp_table()
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      INSERT INTO data_table (id) VALUES (1);
+      EXECUTE 'CREATE TABLE temp_work (id INTEGER)';
+      -- WARNING: PG does NOT implicitly COMMIT on DDL.
+      -- DDL is transactional in PG. Add explicit COMMIT if needed.
+      COMMIT;
+      INSERT INTO data_table (id) VALUES (2);
+    END;
+    $$;
+  complexity: 6
+  constructs: ["EXECUTE IMMEDIATE", "DDL_IN_PLSQL", "IMPLICIT_COMMIT"]
+  tags: ["transaction_semantics", "behavioral_difference"]
+  acceptance_criteria:
+    - "Oracle implicitly commits on DDL; PG DDL is transactional"
+    - "Migration must add explicit COMMIT if same behavior is needed"
+
+- name: transaction_isolation_level
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE read_consistent IS
+    BEGIN
+      SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+      -- Oracle default is READ COMMITTED with statement-level consistency
+      NULL;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE read_consistent()
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+      -- PG default is also READ COMMITTED but uses MVCC differently
+      NULL;
+    END;
+    $$;
+  complexity: 3
+  constructs: ["SET TRANSACTION", "ISOLATION LEVEL"]
+  tags: ["transaction_semantics"]
+  acceptance_criteria:
+    - "Syntax is the same but MVCC behavior differs subtly"
+    - "Oracle uses undo segments; PG uses tuple versioning"
+
+- name: pragma_exception_init
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE handle_custom_error IS
+      e_deadlock EXCEPTION;
+      PRAGMA EXCEPTION_INIT(e_deadlock, -60);
+    BEGIN
+      UPDATE accounts SET balance = 0 WHERE id = 1;
+    EXCEPTION
+      WHEN e_deadlock THEN
+        DBMS_OUTPUT.PUT_LINE('Deadlock detected, retrying...');
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE handle_custom_error()
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      UPDATE accounts SET balance = 0 WHERE id = 1;
+    EXCEPTION
+      WHEN deadlock_detected THEN
+        RAISE NOTICE 'Deadlock detected, retrying...';
+    END;
+    $$;
+  complexity: 5
+  constructs: ["PRAGMA", "EXCEPTION_INIT", "DBMS_OUTPUT"]
+  tags: ["transaction_semantics", "exception_handling"]
+  acceptance_criteria:
+    - "PRAGMA EXCEPTION_INIT maps Oracle error codes to named exceptions"
+    - "PG uses standard condition names (deadlock_detected, etc.)"
+
+- name: forall_save_exceptions
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE bulk_update(p_ids SYS.ODCINUMBERLIST) IS
+    BEGIN
+      FORALL i IN 1..p_ids.COUNT SAVE EXCEPTIONS
+        UPDATE employees SET status = 'PROCESSED' WHERE id = p_ids(i);
+    EXCEPTION
+      WHEN OTHERS THEN
+        FOR j IN 1..SQL%BULK_EXCEPTIONS.COUNT LOOP
+          DBMS_OUTPUT.PUT_LINE('Error at index ' || SQL%BULK_EXCEPTIONS(j).ERROR_INDEX);
+        END LOOP;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE bulk_update(p_ids INTEGER[])
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_error_count INTEGER := 0;
+    BEGIN
+      FOR i IN 1..array_length(p_ids, 1) LOOP
+        BEGIN
+          UPDATE employees SET status = 'PROCESSED' WHERE id = p_ids[i];
+        EXCEPTION
+          WHEN OTHERS THEN
+            v_error_count := v_error_count + 1;
+            RAISE NOTICE 'Error at index %: %', i, SQLERRM;
+        END;
+      END LOOP;
+    END;
+    $$;
+  complexity: 8
+  constructs: ["FORALL", "SAVE EXCEPTIONS", "BULK_EXCEPTIONS", "DBMS_OUTPUT"]
+  tags: ["transaction_semantics", "bulk_operations", "high_complexity"]
+  acceptance_criteria:
+    - "PG has no FORALL; must use FOR loop with per-row exception handling"
+    - "SAVE EXCEPTIONS pattern requires nested BEGIN...EXCEPTION blocks"

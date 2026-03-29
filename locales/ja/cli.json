@@ -1,0 +1,53 @@
+{
+  "commands": {
+    "scan": {
+      "help": "Oracle/PostgreSQLスキーマをスキャンし、移行準備レポートを生成します",
+      "scanning": "{file}をスキャン中...",
+      "found_objects": "{count}個のオブジェクトが見つかりました",
+      "complexity": "複雑度: {score}/10",
+      "complete": "スキャン完了（{seconds}秒）"
+    },
+    "convert": {
+      "help": "Oracle SQL/PL-SQLをPostgreSQLに変換します（逆方向も対応）",
+      "converting": "{count}個のオブジェクトを変換中...",
+      "rules_only": "ルールのみモードを使用中（90%カバレッジ）",
+      "ai_required": "AI支援変換には登録（無料）が必要です。\n登録: stein auth register --email you@company.com\nまたはルールのみモードを使用: stein convert myfile.sql",
+      "complete": "{converted}/{total}個のオブジェクトを変換しました",
+      "forwarded": "{count}個のオブジェクトをAIに転送しました"
+    },
+    "verify": {
+      "help": "変換されたPostgreSQL/Oracle出力の正確性を検証します",
+      "verifying": "{count}個のファイルを検証中...",
+      "green": "グリーン — 高い信頼性",
+      "yellow": "イエロー — レビュー推奨",
+      "red": "レッド — 手動修正が必要"
+    },
+    "auth": {
+      "register_help": "無料のSteinDBアカウントを登録します",
+      "register_success": "登録が完了しました！",
+      "register_prompt": "メールアドレス",
+      "login_help": "既存のトークンでログインします",
+      "logout_help": "保存されたトークンを削除します",
+      "logout_success": "ログアウトしました。トークンなしでもルールのみモードは引き続き使用できます。",
+      "status_help": "現在の認証状態を表示します",
+      "status_authenticated": "認証済み",
+      "status_not_authenticated": "未認証",
+      "upgrade_help": "アカウントを有料プランにアップグレードします"
+    }
+  },
+  "errors": {
+    "file_not_found": "ファイルが見つかりません: {path}",
+    "invalid_sql": "無効なSQL入力です",
+    "connection_failed": "接続に失敗しました: {error}",
+    "no_objects": "入力にオブジェクトが見つかりません"
+  },
+  "report": {
+    "title": "SteinDB移行レポート",
+    "summary": "概要",
+    "total_objects": "オブジェクト合計",
+    "auto_convertible": "自動変換可能",
+    "needs_ai": "AI支援が必要",
+    "complexity_avg": "平均複雑度",
+    "savings_estimate": "推定コスト削減"
+  }
+}

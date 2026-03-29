@@ -1,0 +1,312 @@
+# =============================================================================
+# SteinDB Golden Tests — Advanced SQL Syntax (O2P)
+# Patterns identified by external reviewers as missing from the suite
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# INSERT ALL / INSERT FIRST (Oracle multi-table insert)
+# ---------------------------------------------------------------------------
+
+- name: insert_all_multi_table
+  category: syntax
+  oracle: >-
+    INSERT ALL
+      INTO sales_hist (prod_id, amount) VALUES (product_id, amount)
+      INTO sales_archive (prod_id, amount) VALUES (product_id, amount)
+    SELECT product_id, amount FROM daily_sales
+  expected_postgresql: >-
+    WITH src AS (SELECT product_id, amount FROM daily_sales),
+    ins1 AS (INSERT INTO sales_hist (prod_id, amount) SELECT product_id, amount FROM src)
+    INSERT INTO sales_archive (prod_id, amount) SELECT product_id, amount FROM src
+  complexity: 7
+  constructs: ["INSERT ALL"]
+  tags: ["multi_table_insert", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle INSERT ALL inserts into multiple tables from one SELECT"
+    - "PG uses CTE with multiple INSERT statements"
+
+- name: insert_first_conditional
+  category: syntax
+  oracle: >-
+    INSERT FIRST
+      WHEN amount > 1000 THEN INTO large_orders (id, amount) VALUES (order_id, amount)
+      WHEN amount > 100 THEN INTO medium_orders (id, amount) VALUES (order_id, amount)
+      ELSE INTO small_orders (id, amount) VALUES (order_id, amount)
+    SELECT order_id, amount FROM orders
+  expected_postgresql: >-
+    WITH src AS (SELECT order_id, amount FROM orders),
+    ins1 AS (INSERT INTO large_orders (id, amount) SELECT order_id, amount FROM src WHERE amount > 1000),
+    ins2 AS (INSERT INTO medium_orders (id, amount) SELECT order_id, amount FROM src WHERE amount <= 1000 AND amount > 100)
+    INSERT INTO small_orders (id, amount) SELECT order_id, amount FROM src WHERE amount <= 100
+  complexity: 9
+  constructs: ["INSERT FIRST"]
+  tags: ["multi_table_insert", "conditional", "reviewer_gap"]
+  acceptance_criteria:
+    - "INSERT FIRST evaluates conditions top-down, first match wins"
+    - "PG requires exclusive WHERE clauses to replicate FIRST semantics"
+
+# ---------------------------------------------------------------------------
+# PIVOT / UNPIVOT
+# ---------------------------------------------------------------------------
+
+- name: pivot_basic
+  category: syntax
+  oracle: >-
+    SELECT * FROM sales
+    PIVOT (SUM(amount) FOR quarter IN ('Q1' AS q1, 'Q2' AS q2, 'Q3' AS q3, 'Q4' AS q4))
+  expected_postgresql: >-
+    SELECT product_id,
+      SUM(amount) FILTER (WHERE quarter = 'Q1') AS q1,
+      SUM(amount) FILTER (WHERE quarter = 'Q2') AS q2,
+      SUM(amount) FILTER (WHERE quarter = 'Q3') AS q3,
+      SUM(amount) FILTER (WHERE quarter = 'Q4') AS q4
+    FROM sales GROUP BY product_id
+  complexity: 6
+  constructs: ["PIVOT"]
+  tags: ["pivot", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle PIVOT transposes rows to columns"
+    - "PG uses FILTER (WHERE ...) or crosstab() from tablefunc"
+
+- name: unpivot_basic
+  category: syntax
+  oracle: >-
+    SELECT * FROM quarterly_sales
+    UNPIVOT (amount FOR quarter IN (q1 AS 'Q1', q2 AS 'Q2', q3 AS 'Q3', q4 AS 'Q4'))
+  expected_postgresql: >-
+    SELECT product_id, quarter, amount
+    FROM quarterly_sales
+    CROSS JOIN LATERAL (VALUES ('Q1', q1), ('Q2', q2), ('Q3', q3), ('Q4', q4))
+    AS unpvt(quarter, amount)
+  complexity: 6
+  constructs: ["UNPIVOT"]
+  tags: ["unpivot", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle UNPIVOT transposes columns to rows"
+    - "PG uses LATERAL + VALUES to achieve same result"
+
+# ---------------------------------------------------------------------------
+# KEEP (DENSE_RANK FIRST/LAST)
+# ---------------------------------------------------------------------------
+
+- name: keep_dense_rank_first
+  category: syntax
+  oracle: >-
+    SELECT department_id,
+      MIN(salary) KEEP (DENSE_RANK FIRST ORDER BY hire_date) AS first_hire_salary
+    FROM employees GROUP BY department_id
+  expected_postgresql: >-
+    SELECT DISTINCT ON (department_id) department_id, salary AS first_hire_salary
+    FROM employees ORDER BY department_id, hire_date ASC
+  complexity: 7
+  constructs: ["KEEP", "DENSE_RANK"]
+  tags: ["analytic", "reviewer_gap"]
+  acceptance_criteria:
+    - "KEEP(DENSE_RANK FIRST ...) gets value from first-ranked row"
+    - "PG DISTINCT ON with appropriate ORDER BY achieves same result"
+
+- name: keep_dense_rank_last
+  category: syntax
+  oracle: >-
+    SELECT department_id,
+      MAX(salary) KEEP (DENSE_RANK LAST ORDER BY hire_date) AS last_hire_salary
+    FROM employees GROUP BY department_id
+  expected_postgresql: >-
+    SELECT DISTINCT ON (department_id) department_id, salary AS last_hire_salary
+    FROM employees ORDER BY department_id, hire_date DESC
+  complexity: 7
+  constructs: ["KEEP", "DENSE_RANK"]
+  tags: ["analytic", "reviewer_gap"]
+  acceptance_criteria:
+    - "KEEP(DENSE_RANK LAST ...) gets value from last-ranked row"
+    - "PG DISTINCT ON with reversed ORDER BY achieves same result"
+
+# ---------------------------------------------------------------------------
+# MODEL clause (Oracle spreadsheet) — LLM-required
+# ---------------------------------------------------------------------------
+
+- name: model_clause_basic
+  category: syntax
+  oracle: >-
+    SELECT product, year, amount FROM sales
+    MODEL
+      PARTITION BY (product)
+      DIMENSION BY (year)
+      MEASURES (amount)
+      RULES (amount[2025] = amount[2024] * 1.1)
+  expected_postgresql: null
+  complexity: 15
+  constructs: ["MODEL"]
+  tags: ["llm_required", "oracle_specific", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle MODEL clause has no PG equivalent"
+    - "Requires LLM to translate into CTE-based computation or application logic"
+    - "Mark as LLM-required in conversion pipeline"
+
+# ---------------------------------------------------------------------------
+# XMLTABLE — LLM-required
+# ---------------------------------------------------------------------------
+
+- name: xmltable_basic
+  category: syntax
+  oracle: >-
+    SELECT x.name, x.value
+    FROM xml_data d,
+    XMLTABLE('/root/item' PASSING d.xml_col
+      COLUMNS name VARCHAR2(100) PATH 'name',
+              value NUMBER PATH 'value') x
+  expected_postgresql: >-
+    SELECT x.name, x.value
+    FROM xml_data d,
+    XMLTABLE('/root/item' PASSING d.xml_col
+      COLUMNS name VARCHAR(100) PATH 'name',
+              value NUMERIC PATH 'value') x
+  complexity: 8
+  constructs: ["XMLTABLE"]
+  tags: ["xml", "reviewer_gap"]
+  acceptance_criteria:
+    - "PG supports XMLTABLE natively since PG 10"
+    - "Data types inside COLUMNS clause must be converted"
+
+# ---------------------------------------------------------------------------
+# FLASHBACK query — no PG equivalent, manual
+# ---------------------------------------------------------------------------
+
+- name: flashback_as_of_timestamp
+  category: syntax
+  oracle: >-
+    SELECT * FROM employees AS OF TIMESTAMP
+    (SYSTIMESTAMP - INTERVAL '1' HOUR)
+  expected_postgresql: null
+  complexity: 12
+  constructs: ["FLASHBACK", "AS_OF_TIMESTAMP"]
+  tags: ["manual_required", "no_pg_equivalent", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle FLASHBACK has no PostgreSQL equivalent"
+    - "Requires application-level temporal tables or audit trail"
+    - "Must be flagged for manual review"
+
+# ---------------------------------------------------------------------------
+# SAMPLE clause (Oracle random sampling)
+# ---------------------------------------------------------------------------
+
+- name: sample_clause
+  category: syntax
+  oracle: "SELECT * FROM employees SAMPLE (10)"
+  expected_postgresql: "SELECT * FROM employees TABLESAMPLE BERNOULLI (10)"
+  complexity: 3
+  constructs: ["SAMPLE"]
+  tags: ["sampling", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle SAMPLE maps to PG TABLESAMPLE"
+    - "BERNOULLI method provides row-level sampling"
+
+# ---------------------------------------------------------------------------
+# OUTER APPLY / CROSS APPLY
+# ---------------------------------------------------------------------------
+
+- name: outer_apply_to_left_join_lateral
+  category: syntax
+  oracle: >-
+    SELECT d.name, e.max_sal
+    FROM departments d
+    OUTER APPLY (SELECT MAX(salary) AS max_sal FROM employees WHERE department_id = d.id) e
+  expected_postgresql: >-
+    SELECT d.name, e.max_sal
+    FROM departments d
+    LEFT JOIN LATERAL (SELECT MAX(salary) AS max_sal FROM employees WHERE department_id = d.id) e ON TRUE
+  complexity: 5
+  constructs: ["OUTER APPLY"]
+  tags: ["lateral", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle OUTER APPLY is equivalent to PG LEFT JOIN LATERAL ... ON TRUE"
+
+- name: cross_apply_to_cross_join_lateral
+  category: syntax
+  oracle: >-
+    SELECT d.name, e.emp_name
+    FROM departments d
+    CROSS APPLY (SELECT employee_name AS emp_name FROM employees WHERE department_id = d.id) e
+  expected_postgresql: >-
+    SELECT d.name, e.emp_name
+    FROM departments d
+    CROSS JOIN LATERAL (SELECT employee_name AS emp_name FROM employees WHERE department_id = d.id) e
+  complexity: 5
+  constructs: ["CROSS APPLY"]
+  tags: ["lateral", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle CROSS APPLY is equivalent to PG CROSS JOIN LATERAL"
+
+# ---------------------------------------------------------------------------
+# Analytic function differences
+# ---------------------------------------------------------------------------
+
+- name: ratio_to_report
+  category: syntax
+  oracle: >-
+    SELECT employee_id, salary,
+      RATIO_TO_REPORT(salary) OVER (PARTITION BY department_id) AS sal_ratio
+    FROM employees
+  expected_postgresql: >-
+    SELECT employee_id, salary,
+      salary::NUMERIC / SUM(salary) OVER (PARTITION BY department_id) AS sal_ratio
+    FROM employees
+  complexity: 5
+  constructs: ["RATIO_TO_REPORT"]
+  tags: ["analytic", "reviewer_gap"]
+  acceptance_criteria:
+    - "RATIO_TO_REPORT not available in PG"
+    - "Equivalent: value / SUM(value) OVER same partition"
+
+# ---------------------------------------------------------------------------
+# ROWID-based pagination → keyset pagination
+# ---------------------------------------------------------------------------
+
+- name: rowid_pagination
+  category: syntax
+  oracle: >-
+    SELECT * FROM employees WHERE ROWID IN
+    (SELECT ROWID FROM (SELECT ROWID, ROWNUM rn FROM employees) WHERE rn BETWEEN 11 AND 20)
+  expected_postgresql: >-
+    SELECT * FROM employees ORDER BY id OFFSET 10 LIMIT 10
+  complexity: 6
+  constructs: ["ROWID", "ROWNUM"]
+  tags: ["pagination", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle ROWID-based pagination has no direct PG equivalent"
+    - "PG uses OFFSET/LIMIT or keyset pagination"
+
+# ---------------------------------------------------------------------------
+# FETCH FIRST n ROWS ONLY
+# ---------------------------------------------------------------------------
+
+- name: fetch_first_rows
+  category: syntax
+  oracle: >-
+    SELECT * FROM employees ORDER BY salary DESC
+    FETCH FIRST 10 ROWS ONLY
+  expected_postgresql: >-
+    SELECT * FROM employees ORDER BY salary DESC
+    LIMIT 10
+  complexity: 2
+  constructs: ["FETCH FIRST"]
+  tags: ["pagination", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle 12c+ FETCH FIRST maps to PG LIMIT"
+    - "PG also supports FETCH FIRST syntax since PG 8.4"
+
+# ---------------------------------------------------------------------------
+# FOR UPDATE WAIT n
+# ---------------------------------------------------------------------------
+
+- name: for_update_wait
+  category: syntax
+  oracle: "SELECT * FROM employees WHERE id = 1 FOR UPDATE WAIT 5"
+  expected_postgresql: "SELECT * FROM employees WHERE id = 1 FOR UPDATE"
+  complexity: 4
+  constructs: ["FOR UPDATE WAIT"]
+  tags: ["locking", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle FOR UPDATE WAIT n has no direct PG equivalent"
+    - "PG supports FOR UPDATE NOWAIT or use SET lock_timeout"
+    - "WAIT with specific seconds requires statement_timeout workaround"

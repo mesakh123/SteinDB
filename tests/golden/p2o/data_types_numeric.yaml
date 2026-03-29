@@ -1,0 +1,185 @@
+# =============================================================================
+# SteinDB Golden Tests — P2O Numeric Data Type Conversions
+# PostgreSQL numeric types → Oracle NUMBER/BINARY_FLOAT/BINARY_DOUBLE
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# INTEGER TYPES
+# ---------------------------------------------------------------------------
+
+- name: smallint_to_number5
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (val SMALLINT)"
+  expected: "CREATE TABLE t (val NUMBER(5))"
+  constructs: ["SMALLINT"]
+  tags: ["numeric", "p2o"]
+
+- name: integer_to_number10
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (id INTEGER)"
+  expected: "CREATE TABLE t (id NUMBER(10))"
+  constructs: ["INTEGER"]
+  tags: ["numeric", "p2o"]
+
+- name: bigint_to_number19
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (big_id BIGINT)"
+  expected: "CREATE TABLE t (big_id NUMBER(19))"
+  constructs: ["BIGINT"]
+  tags: ["numeric", "p2o"]
+
+# ---------------------------------------------------------------------------
+# DECIMAL / NUMERIC TYPES
+# ---------------------------------------------------------------------------
+
+- name: numeric_precision_scale_to_number
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (price NUMERIC(10,2))"
+  expected: "CREATE TABLE t (price NUMBER(10,2))"
+  constructs: ["NUMERIC"]
+  tags: ["numeric", "decimal", "p2o"]
+
+- name: numeric_no_precision_to_number
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (val NUMERIC)"
+  expected: "CREATE TABLE t (val NUMBER)"
+  constructs: ["NUMERIC"]
+  tags: ["numeric", "p2o"]
+
+# ---------------------------------------------------------------------------
+# FLOATING POINT TYPES
+# ---------------------------------------------------------------------------
+
+- name: real_to_binary_float
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (temperature REAL)"
+  expected: "CREATE TABLE t (temperature BINARY_FLOAT)"
+  constructs: ["REAL"]
+  tags: ["numeric", "float", "p2o"]
+
+- name: double_precision_to_binary_double
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (measurement DOUBLE PRECISION)"
+  expected: "CREATE TABLE t (measurement BINARY_DOUBLE)"
+  constructs: ["DOUBLE PRECISION"]
+  tags: ["numeric", "float", "p2o"]
+
+# ---------------------------------------------------------------------------
+# SERIAL TYPES → SEQUENCE
+# ---------------------------------------------------------------------------
+
+- name: serial_to_number_sequence
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (id SERIAL PRIMARY KEY, name VARCHAR(100))"
+  expected: >-
+    CREATE TABLE t (id NUMBER(10) NOT NULL PRIMARY KEY, name VARCHAR2(100));
+    CREATE SEQUENCE t_id_seq START WITH 1;
+    CREATE OR REPLACE TRIGGER t_id_trg BEFORE INSERT ON t
+    FOR EACH ROW BEGIN :NEW.id := t_id_seq.NEXTVAL; END;
+  constructs: ["SERIAL"]
+  tags: ["numeric", "sequence", "p2o"]
+
+- name: bigserial_to_number_sequence
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (id BIGSERIAL PRIMARY KEY)"
+  expected: >-
+    CREATE TABLE t (id NUMBER(19) NOT NULL PRIMARY KEY);
+    CREATE SEQUENCE t_id_seq START WITH 1;
+    CREATE OR REPLACE TRIGGER t_id_trg BEFORE INSERT ON t
+    FOR EACH ROW BEGIN :NEW.id := t_id_seq.NEXTVAL; END;
+  constructs: ["BIGSERIAL"]
+  tags: ["numeric", "sequence", "p2o"]
+
+# ---------------------------------------------------------------------------
+# BOOLEAN TYPE
+# ---------------------------------------------------------------------------
+
+- name: boolean_to_number1
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (is_active BOOLEAN DEFAULT TRUE)"
+  expected: "CREATE TABLE t (is_active NUMBER(1) DEFAULT 1)"
+  constructs: ["BOOLEAN"]
+  tags: ["numeric", "boolean", "p2o"]
+
+- name: boolean_where_bare
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "SELECT * FROM users WHERE active"
+  expected: "SELECT * FROM users WHERE active = 1"
+  constructs: ["BOOLEAN"]
+  tags: ["numeric", "boolean", "p2o"]
+
+# ---------------------------------------------------------------------------
+# MIXED & EDGE CASES
+# ---------------------------------------------------------------------------
+
+- name: mixed_numeric_types_table
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: >-
+    CREATE TABLE measurements (
+      id SERIAL PRIMARY KEY,
+      sensor_id INTEGER NOT NULL,
+      reading DOUBLE PRECISION,
+      count BIGINT DEFAULT 0,
+      factor REAL,
+      total NUMERIC(15,4)
+    )
+  expected: >-
+    CREATE TABLE measurements (
+      id NUMBER(10) NOT NULL PRIMARY KEY,
+      sensor_id NUMBER(10) NOT NULL,
+      reading BINARY_DOUBLE,
+      count NUMBER(19) DEFAULT 0,
+      factor BINARY_FLOAT,
+      total NUMBER(15,4)
+    );
+    CREATE SEQUENCE measurements_id_seq START WITH 1;
+    CREATE OR REPLACE TRIGGER measurements_id_trg BEFORE INSERT ON measurements
+    FOR EACH ROW BEGIN :NEW.id := measurements_id_seq.NEXTVAL; END;
+  constructs: ["SERIAL", "INTEGER", "DOUBLE PRECISION", "BIGINT", "REAL", "NUMERIC"]
+  tags: ["numeric", "mixed", "p2o"]
+
+- name: numeric_negative_scale
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (rounded_val NUMERIC(10,-2))"
+  expected: "CREATE TABLE t (rounded_val NUMBER(10,-2))"
+  constructs: ["NUMERIC"]
+  tags: ["numeric", "edge_case", "p2o"]
+
+- name: money_to_number
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (amount MONEY)"
+  expected: "CREATE TABLE t (amount NUMBER(19,4))"
+  constructs: ["MONEY"]
+  tags: ["numeric", "p2o"]
+  acceptance_criteria:
+    - "PG MONEY type has no Oracle equivalent"
+    - "NUMBER(19,4) provides sufficient precision for monetary values"
+
+- name: integer_array_to_nested_table
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (id INTEGER, scores INTEGER[])"
+  expected: >-
+    CREATE TABLE t (
+      id NUMBER(10),
+      scores SYS.ODCINUMBERLIST
+    )
+  constructs: ["INTEGER", "ARRAY"]
+  tags: ["numeric", "array", "lossy", "p2o"]
+  acceptance_criteria:
+    - "PG integer arrays have no direct Oracle column-level equivalent"
+    - "Use built-in SYS.ODCINUMBERLIST or define custom nested table type"

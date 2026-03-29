@@ -1,0 +1,120 @@
+# =============================================================================
+# SteinDB Golden Tests — Advanced Synonym Patterns
+# Public/private synonyms, wrapper functions, search_path, chaining
+# =============================================================================
+
+- name: public_synonym_for_table
+  category: synonyms
+  oracle: "CREATE PUBLIC SYNONYM customers FOR sales.customers"
+  expected_postgresql: "CREATE VIEW public.customers AS SELECT * FROM sales.customers"
+  constructs: ["PUBLIC SYNONYM"]
+
+- name: public_synonym_for_view
+  category: synonyms
+  oracle: "CREATE PUBLIC SYNONYM active_orders FOR reporting.v_active_orders"
+  expected_postgresql: "CREATE VIEW public.active_orders AS SELECT * FROM reporting.v_active_orders"
+  constructs: ["PUBLIC SYNONYM", "VIEW"]
+
+- name: public_synonym_for_function
+  category: synonyms
+  oracle: "CREATE PUBLIC SYNONYM calc_tax FOR finance.calculate_tax"
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION public.calc_tax(
+    ) RETURNS NUMERIC
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      RETURN finance.calculate_tax();
+    END;
+    $$;
+  complexity: 3
+  constructs: ["PUBLIC SYNONYM", "FUNCTION"]
+  tags: ["wrapper_function", "manual_review"]
+  acceptance_criteria:
+    - "Wrapper function signature must match the original function parameters"
+    - "May require manual adjustment for parameter types"
+
+- name: public_synonym_for_sequence
+  category: synonyms
+  oracle: "CREATE PUBLIC SYNONYM order_seq FOR sales.order_seq"
+  expected_postgresql: "-- Synonym for sequence: use schema-qualified name sales.order_seq or SET search_path TO sales, public"
+  constructs: ["PUBLIC SYNONYM", "SEQUENCE"]
+  tags: ["search_path"]
+
+- name: private_synonym_search_path
+  category: synonyms
+  oracle: "CREATE SYNONYM emp FOR hr.employees"
+  expected_postgresql: "CREATE VIEW emp AS SELECT * FROM hr.employees"
+  constructs: ["SYNONYM"]
+  acceptance_criteria:
+    - "Alternative: SET search_path TO hr, public (avoids view creation)"
+
+- name: drop_public_synonym
+  category: synonyms
+  oracle: "DROP PUBLIC SYNONYM customers"
+  expected_postgresql: "DROP VIEW IF EXISTS public.customers"
+  constructs: ["DROP PUBLIC SYNONYM"]
+
+- name: synonym_chain_resolution
+  category: synonyms
+  oracle: |
+    CREATE SYNONYM emp_alias FOR emp_syn;
+    CREATE SYNONYM emp_syn FOR hr.employees;
+  expected_postgresql: |
+    CREATE VIEW emp_syn AS SELECT * FROM hr.employees;
+    CREATE VIEW emp_alias AS SELECT * FROM hr.employees;
+  complexity: 3
+  constructs: ["SYNONYM"]
+  tags: ["chained"]
+  acceptance_criteria:
+    - "Synonym chains must be resolved to the final target object"
+    - "Views should reference the base table, not intermediate views"
+
+- name: search_path_alternative
+  category: synonyms
+  oracle: |
+    CREATE SYNONYM employees FOR hr.employees;
+    CREATE SYNONYM departments FOR hr.departments;
+    CREATE SYNONYM jobs FOR hr.jobs;
+  expected_postgresql: |
+    SET search_path TO hr, public;
+    -- All three synonyms resolved via search_path: employees, departments, jobs
+    -- No views needed when all synonyms point to the same schema
+  complexity: 2
+  constructs: ["SYNONYM", "search_path"]
+  tags: ["search_path", "batch"]
+
+- name: synonym_for_materialized_view
+  category: synonyms
+  oracle: "CREATE PUBLIC SYNONYM mv_sales_summary FOR reporting.mv_sales_summary"
+  expected_postgresql: "CREATE VIEW public.mv_sales_summary AS SELECT * FROM reporting.mv_sales_summary"
+  constructs: ["PUBLIC SYNONYM", "MATERIALIZED VIEW"]
+
+- name: synonym_for_package_function
+  category: synonyms
+  oracle: "CREATE PUBLIC SYNONYM get_emp_name FOR hr_pkg.get_employee_name"
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION public.get_emp_name(p_id INTEGER) RETURNS VARCHAR
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      RETURN hr_pkg.get_employee_name(p_id);
+    END;
+    $$;
+  complexity: 4
+  constructs: ["PUBLIC SYNONYM", "PACKAGE FUNCTION"]
+  tags: ["wrapper_function", "manual_review"]
+
+- name: synonym_with_grants
+  category: synonyms
+  oracle: |
+    CREATE PUBLIC SYNONYM all_employees FOR hr.employees;
+    GRANT SELECT ON hr.employees TO public;
+  expected_postgresql: |
+    CREATE VIEW public.all_employees AS SELECT * FROM hr.employees;
+    GRANT SELECT ON public.all_employees TO PUBLIC;
+  constructs: ["PUBLIC SYNONYM", "GRANT"]
+
+- name: replace_synonym
+  category: synonyms
+  oracle: "CREATE OR REPLACE PUBLIC SYNONYM emp FOR hr.employees_v2"
+  expected_postgresql: "CREATE OR REPLACE VIEW public.emp AS SELECT * FROM hr.employees_v2"
+  constructs: ["CREATE OR REPLACE", "PUBLIC SYNONYM"]

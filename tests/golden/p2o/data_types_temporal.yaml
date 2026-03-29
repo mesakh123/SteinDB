@@ -1,0 +1,222 @@
+# =============================================================================
+# SteinDB Golden Tests — P2O Temporal Data Type Conversions
+# PostgreSQL date/time types → Oracle DATE/TIMESTAMP
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# TIMESTAMP TYPES
+# ---------------------------------------------------------------------------
+
+- name: timestamp0_to_date
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (created_at TIMESTAMP(0))"
+  expected: "CREATE TABLE t (created_at DATE)"
+  constructs: ["TIMESTAMP"]
+  tags: ["temporal", "p2o"]
+  acceptance_criteria:
+    - "TIMESTAMP(0) has second-level precision, same as Oracle DATE"
+    - "Oracle DATE includes time component unlike PG DATE"
+
+- name: timestamp_to_timestamp
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (created_at TIMESTAMP)"
+  expected: "CREATE TABLE t (created_at TIMESTAMP)"
+  constructs: ["TIMESTAMP"]
+  tags: ["temporal", "p2o"]
+
+- name: timestamptz_to_timestamp_tz
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (event_time TIMESTAMP WITH TIME ZONE)"
+  expected: "CREATE TABLE t (event_time TIMESTAMP WITH TIME ZONE)"
+  constructs: ["TIMESTAMPTZ"]
+  tags: ["temporal", "timezone", "p2o"]
+
+- name: date_to_date_with_warning
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (birth_date DATE)"
+  expected: "CREATE TABLE t (birth_date DATE)"
+  constructs: ["DATE"]
+  tags: ["temporal", "p2o"]
+  acceptance_criteria:
+    - "PG DATE has no time component"
+    - "Oracle DATE includes time component — semantic difference"
+    - "May need CHECK constraint or application-level enforcement"
+
+# ---------------------------------------------------------------------------
+# INTERVAL / TIME TYPES
+# ---------------------------------------------------------------------------
+
+- name: interval_to_interval_day_to_second
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (duration INTERVAL)"
+  expected: "CREATE TABLE t (duration INTERVAL DAY TO SECOND)"
+  constructs: ["INTERVAL"]
+  tags: ["temporal", "interval", "p2o"]
+  acceptance_criteria:
+    - "PG INTERVAL is more flexible than Oracle's"
+    - "Oracle requires DAY TO SECOND or YEAR TO MONTH"
+
+- name: time_to_varchar2
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (check_in TIME)"
+  expected: "CREATE TABLE t (check_in VARCHAR2(8))"
+  constructs: ["TIME"]
+  tags: ["temporal", "lossy", "p2o"]
+  acceptance_criteria:
+    - "Oracle has no standalone TIME type"
+    - "VARCHAR2(8) stores HH:MM:SS format"
+    - "Loses native time arithmetic capabilities"
+
+# ---------------------------------------------------------------------------
+# DEFAULT EXPRESSIONS
+# ---------------------------------------------------------------------------
+
+- name: default_current_timestamp_to_sysdate
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+  expected: "CREATE TABLE t (created_at TIMESTAMP DEFAULT SYSDATE)"
+  constructs: ["CURRENT_TIMESTAMP"]
+  tags: ["temporal", "default", "p2o"]
+
+- name: default_now_to_sysdate
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (created_at TIMESTAMP DEFAULT NOW())"
+  expected: "CREATE TABLE t (created_at TIMESTAMP DEFAULT SYSDATE)"
+  constructs: ["NOW"]
+  tags: ["temporal", "default", "p2o"]
+
+# ---------------------------------------------------------------------------
+# AT TIME ZONE / MIXED
+# ---------------------------------------------------------------------------
+
+- name: at_time_zone_conversion
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "SELECT created_at AT TIME ZONE 'UTC' FROM events"
+  expected: "SELECT created_at AT TIME ZONE 'UTC' FROM events"
+  constructs: ["AT TIME ZONE"]
+  tags: ["temporal", "timezone", "p2o"]
+  acceptance_criteria:
+    - "AT TIME ZONE syntax is supported in both PG and Oracle"
+    - "Semantics are similar but not identical for TIMESTAMPTZ"
+
+- name: mixed_temporal_table
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: >-
+    CREATE TABLE audit_log (
+      id SERIAL PRIMARY KEY,
+      event_date DATE,
+      event_time TIMESTAMP WITH TIME ZONE,
+      duration INTERVAL,
+      check_in TIME,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  expected: >-
+    CREATE TABLE audit_log (
+      id NUMBER(10) NOT NULL PRIMARY KEY,
+      event_date DATE,
+      event_time TIMESTAMP WITH TIME ZONE,
+      duration INTERVAL DAY TO SECOND,
+      check_in VARCHAR2(8),
+      created_at TIMESTAMP DEFAULT SYSDATE
+    );
+    CREATE SEQUENCE audit_log_id_seq START WITH 1;
+    CREATE OR REPLACE TRIGGER audit_log_id_trg BEFORE INSERT ON audit_log
+    FOR EACH ROW BEGIN :NEW.id := audit_log_id_seq.NEXTVAL; END;
+  constructs: ["SERIAL", "DATE", "TIMESTAMPTZ", "INTERVAL", "TIME", "NOW"]
+  tags: ["temporal", "mixed", "p2o"]
+
+# ---------------------------------------------------------------------------
+# ADDITIONAL TEMPORAL EDGE CASES
+# ---------------------------------------------------------------------------
+
+- name: timestamp_precision_6_to_timestamp
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (precise_time TIMESTAMP(6))"
+  expected: "CREATE TABLE t (precise_time TIMESTAMP(6))"
+  constructs: ["TIMESTAMP"]
+  tags: ["temporal", "precision", "p2o"]
+
+- name: interval_year_to_month
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (contract_length INTERVAL YEAR TO MONTH)"
+  expected: "CREATE TABLE t (contract_length INTERVAL YEAR TO MONTH)"
+  constructs: ["INTERVAL"]
+  tags: ["temporal", "interval", "p2o"]
+
+- name: timetz_to_varchar2_tz
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (event_time TIME WITH TIME ZONE)"
+  expected: "CREATE TABLE t (event_time VARCHAR2(15))"
+  constructs: ["TIMETZ"]
+  tags: ["temporal", "lossy", "p2o"]
+  acceptance_criteria:
+    - "Oracle has no standalone TIME WITH TIME ZONE type"
+    - "VARCHAR2(15) stores HH:MM:SS+TZ format"
+
+- name: infinity_date_literal
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "INSERT INTO subscriptions (expiry) VALUES ('infinity'::DATE)"
+  expected: "INSERT INTO subscriptions (expiry) VALUES (DATE '9999-12-31')"
+  constructs: ["infinity"]
+  tags: ["temporal", "edge_case", "p2o"]
+  acceptance_criteria:
+    - "PG supports 'infinity' and '-infinity' date literals"
+    - "Oracle has no equivalent; use max/min date values"
+
+- name: epoch_literal_to_date
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "SELECT 'epoch'::TIMESTAMP"
+  expected: "SELECT TIMESTAMP '1970-01-01 00:00:00' FROM DUAL"
+  constructs: ["epoch"]
+  tags: ["temporal", "edge_case", "p2o"]
+
+# ---------------------------------------------------------------------------
+# TIMESTAMP PRECISION VALIDATION (from PDF validation 2026-03-28)
+# ---------------------------------------------------------------------------
+
+- name: timestamp_precision_3_to_timestamp3
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (event_time TIMESTAMP(3))"
+  expected: "CREATE TABLE t (event_time TIMESTAMP(3))"
+  constructs: ["TIMESTAMP"]
+  tags: ["temporal", "precision", "p2o"]
+  acceptance_criteria:
+    - "PG TIMESTAMP precision range is 0-6 (microseconds)"
+    - "Oracle TIMESTAMP precision range is 0-9 (nanoseconds)"
+    - "Precision 3 (milliseconds) is valid in both systems"
+
+- name: timestamp_precision_1_to_timestamp1
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (coarse_time TIMESTAMP(1))"
+  expected: "CREATE TABLE t (coarse_time TIMESTAMP(1))"
+  constructs: ["TIMESTAMP"]
+  tags: ["temporal", "precision", "p2o"]
+
+- name: timestamp_no_precision_default
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (created_at TIMESTAMP)"
+  expected: "CREATE TABLE t (created_at TIMESTAMP)"
+  constructs: ["TIMESTAMP"]
+  tags: ["temporal", "precision", "p2o"]
+  acceptance_criteria:
+    - "PG bare TIMESTAMP defaults to precision 6 (microseconds)"
+    - "Oracle bare TIMESTAMP defaults to precision 6 (fractional seconds)"
+    - "Both defaults match so no precision annotation needed"

@@ -1,0 +1,231 @@
+# Golden tests: PL/SQL cursors and bulk operations → PL/pgSQL equivalents
+
+- name: explicit_cursor
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE process_employees IS
+      CURSOR c_emp IS SELECT id, name, salary FROM employees WHERE active = 1;
+      v_rec c_emp%ROWTYPE;
+    BEGIN
+      OPEN c_emp;
+      LOOP
+        FETCH c_emp INTO v_rec;
+        EXIT WHEN c_emp%NOTFOUND;
+        UPDATE employees SET processed = 1 WHERE id = v_rec.id;
+      END LOOP;
+      CLOSE c_emp;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE process_employees()
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      c_emp CURSOR FOR SELECT id, name, salary FROM employees WHERE active = 1;
+      v_rec RECORD;
+    BEGIN
+      OPEN c_emp;
+      LOOP
+        FETCH c_emp INTO v_rec;
+        EXIT WHEN NOT FOUND;
+        UPDATE employees SET processed = 1 WHERE id = v_rec.id;
+      END LOOP;
+      CLOSE c_emp;
+    END;
+    $$;
+  complexity: 5
+  constructs: ["CURSOR", "FETCH", "%NOTFOUND", "%ROWTYPE"]
+
+- name: cursor_for_loop_implicit
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE print_departments IS
+    BEGIN
+      FOR rec IN (SELECT department_id, department_name FROM departments ORDER BY department_name) LOOP
+        DBMS_OUTPUT.PUT_LINE(rec.department_name);
+      END LOOP;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE print_departments()
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      rec RECORD;
+    BEGIN
+      FOR rec IN SELECT department_id, department_name FROM departments ORDER BY department_name LOOP
+        RAISE NOTICE '%', rec.department_name;
+      END LOOP;
+    END;
+    $$;
+  complexity: 3
+  constructs: ["CURSOR FOR LOOP", "DBMS_OUTPUT"]
+
+- name: sys_refcursor_to_refcursor
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE FUNCTION get_employees_by_dept(p_dept_id NUMBER) RETURN SYS_REFCURSOR IS
+      v_cursor SYS_REFCURSOR;
+    BEGIN
+      OPEN v_cursor FOR SELECT id, name FROM employees WHERE department_id = p_dept_id;
+      RETURN v_cursor;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION get_employees_by_dept(p_dept_id INTEGER) RETURNS REFCURSOR
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_cursor REFCURSOR;
+    BEGIN
+      OPEN v_cursor FOR SELECT id, name FROM employees WHERE department_id = p_dept_id;
+      RETURN v_cursor;
+    END;
+    $$;
+  complexity: 4
+  constructs: ["SYS_REFCURSOR", "RETURN"]
+
+- name: bulk_collect_to_array
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE get_all_names IS
+      TYPE name_array IS TABLE OF VARCHAR2(100);
+      v_names name_array;
+    BEGIN
+      SELECT name BULK COLLECT INTO v_names FROM employees;
+      FOR i IN 1..v_names.COUNT LOOP
+        DBMS_OUTPUT.PUT_LINE(v_names(i));
+      END LOOP;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE get_all_names()
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_names VARCHAR[];
+      v_name VARCHAR;
+    BEGIN
+      SELECT ARRAY_AGG(name) INTO v_names FROM employees;
+      FOREACH v_name IN ARRAY v_names LOOP
+        RAISE NOTICE '%', v_name;
+      END LOOP;
+    END;
+    $$;
+  complexity: 5
+  constructs: ["BULK COLLECT", "TYPE TABLE OF", "DBMS_OUTPUT"]
+
+- name: forall_insert_to_plain_sql
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE copy_employees IS
+      TYPE id_array IS TABLE OF NUMBER;
+      v_ids id_array;
+    BEGIN
+      SELECT id BULK COLLECT INTO v_ids FROM employees WHERE active = 1;
+      FORALL i IN 1..v_ids.COUNT
+        INSERT INTO archived_employees (employee_id, archived_date)
+        VALUES (v_ids(i), SYSDATE);
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE copy_employees()
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      INSERT INTO archived_employees (employee_id, archived_date)
+      SELECT id, CURRENT_TIMESTAMP FROM employees WHERE active = 1;
+    END;
+    $$;
+  complexity: 5
+  constructs: ["FORALL", "BULK COLLECT", "SYSDATE"]
+
+- name: open_cursor_dynamic_sql
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE dynamic_query(p_table VARCHAR2) IS
+      v_cursor SYS_REFCURSOR;
+      v_name VARCHAR2(100);
+    BEGIN
+      OPEN v_cursor FOR 'SELECT name FROM ' || p_table || ' WHERE ROWNUM <= 10';
+      LOOP
+        FETCH v_cursor INTO v_name;
+        EXIT WHEN v_cursor%NOTFOUND;
+        DBMS_OUTPUT.PUT_LINE(v_name);
+      END LOOP;
+      CLOSE v_cursor;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE dynamic_query(p_table VARCHAR)
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_cursor REFCURSOR;
+      v_name VARCHAR(100);
+    BEGIN
+      OPEN v_cursor FOR EXECUTE 'SELECT name FROM ' || p_table || ' LIMIT 10';
+      LOOP
+        FETCH v_cursor INTO v_name;
+        EXIT WHEN NOT FOUND;
+        RAISE NOTICE '%', v_name;
+      END LOOP;
+      CLOSE v_cursor;
+    END;
+    $$;
+  complexity: 6
+  constructs: ["SYS_REFCURSOR", "OPEN FOR", "ROWNUM", "DBMS_OUTPUT", "VARCHAR2"]
+
+- name: cursor_with_parameters
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE report_by_dept(p_dept_id NUMBER) IS
+      CURSOR c_emp(dept_id NUMBER) IS
+        SELECT name, salary FROM employees WHERE department_id = dept_id;
+      v_rec c_emp%ROWTYPE;
+    BEGIN
+      OPEN c_emp(p_dept_id);
+      LOOP
+        FETCH c_emp INTO v_rec;
+        EXIT WHEN c_emp%NOTFOUND;
+        DBMS_OUTPUT.PUT_LINE(v_rec.name || ': ' || v_rec.salary);
+      END LOOP;
+      CLOSE c_emp;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE report_by_dept(p_dept_id INTEGER)
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      c_emp CURSOR (dept_id INTEGER) FOR
+        SELECT name, salary FROM employees WHERE department_id = dept_id;
+      v_rec RECORD;
+    BEGIN
+      OPEN c_emp(p_dept_id);
+      LOOP
+        FETCH c_emp INTO v_rec;
+        EXIT WHEN NOT FOUND;
+        RAISE NOTICE '%: %', v_rec.name, v_rec.salary;
+      END LOOP;
+      CLOSE c_emp;
+    END;
+    $$;
+  complexity: 5
+  constructs: ["CURSOR", "CURSOR PARAMETER", "%ROWTYPE", "%NOTFOUND", "DBMS_OUTPUT"]
+
+- name: cursor_attributes
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE update_and_count IS
+      v_count NUMBER;
+    BEGIN
+      UPDATE employees SET salary = salary * 1.05 WHERE department_id = 10;
+      v_count := SQL%ROWCOUNT;
+      DBMS_OUTPUT.PUT_LINE('Updated ' || v_count || ' rows');
+      IF SQL%NOTFOUND THEN
+        DBMS_OUTPUT.PUT_LINE('No rows affected');
+      END IF;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE update_and_count()
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_count INTEGER;
+    BEGIN
+      UPDATE employees SET salary = salary * 1.05 WHERE department_id = 10;
+      GET DIAGNOSTICS v_count = ROW_COUNT;
+      RAISE NOTICE 'Updated % rows', v_count;
+      IF NOT FOUND THEN
+        RAISE NOTICE 'No rows affected';
+      END IF;
+    END;
+    $$;
+  complexity: 4
+  constructs: ["SQL%ROWCOUNT", "SQL%NOTFOUND", "DBMS_OUTPUT"]

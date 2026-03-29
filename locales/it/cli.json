@@ -1,0 +1,53 @@
+{
+  "commands": {
+    "scan": {
+      "help": "Scansiona lo schema Oracle/PostgreSQL e genera un rapporto di preparazione alla migrazione",
+      "scanning": "Scansione di {file} in corso...",
+      "found_objects": "{count} oggetti trovati",
+      "complexity": "Complessità: {score}/10",
+      "complete": "Scansione completata in {seconds}s"
+    },
+    "convert": {
+      "help": "Converti Oracle SQL/PL-SQL in PostgreSQL (o viceversa)",
+      "converting": "Conversione di {count} oggetti in corso...",
+      "rules_only": "Modalità solo regole in uso (copertura 90%)",
+      "ai_required": "La conversione assistita da IA richiede la registrazione (gratuita).\nRegistrati: stein auth register --email you@company.com\nOppure usa la modalità solo regole: stein convert myfile.sql",
+      "complete": "{converted}/{total} oggetti convertiti",
+      "forwarded": "{count} oggetti inoltrati all'IA"
+    },
+    "verify": {
+      "help": "Verifica la correttezza dell'output PostgreSQL/Oracle convertito",
+      "verifying": "Verifica di {count} file in corso...",
+      "green": "VERDE — alta affidabilità",
+      "yellow": "GIALLO — revisione consigliata",
+      "red": "ROSSO — correzione manuale necessaria"
+    },
+    "auth": {
+      "register_help": "Registra un account SteinDB gratuito",
+      "register_success": "Registrazione completata!",
+      "register_prompt": "Indirizzo email",
+      "login_help": "Accedi con un token esistente",
+      "logout_help": "Rimuovi il token salvato",
+      "logout_success": "Disconnesso. La modalità solo regole funziona ancora senza token.",
+      "status_help": "Mostra lo stato di autenticazione corrente",
+      "status_authenticated": "Autenticato",
+      "status_not_authenticated": "Non autenticato",
+      "upgrade_help": "Aggiorna il tuo account a un piano a pagamento"
+    }
+  },
+  "errors": {
+    "file_not_found": "File non trovato: {path}",
+    "invalid_sql": "Input SQL non valido",
+    "connection_failed": "Connessione fallita: {error}",
+    "no_objects": "Nessun oggetto trovato nell'input"
+  },
+  "report": {
+    "title": "Rapporto di Migrazione SteinDB",
+    "summary": "Riepilogo",
+    "total_objects": "Oggetti Totali",
+    "auto_convertible": "Convertibile automaticamente",
+    "needs_ai": "Richiede assistenza IA",
+    "complexity_avg": "Complessità Media",
+    "savings_estimate": "Risparmio Stimato"
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "commands": {
+    "scan": {
+      "help": "Escanear esquema Oracle/PostgreSQL y generar informe de preparación para migración",
+      "scanning": "Escaneando {file}...",
+      "found_objects": "{count} objetos encontrados",
+      "complexity": "Complejidad: {score}/10",
+      "complete": "Escaneo completado en {seconds}s"
+    },
+    "convert": {
+      "help": "Convertir Oracle SQL/PL-SQL a PostgreSQL (o viceversa)",
+      "converting": "Convirtiendo {count} objetos...",
+      "rules_only": "Usando modo solo reglas (90% de cobertura)",
+      "ai_required": "La conversión asistida por IA requiere registro (gratuito).\nRegistrarse: stein auth register --email you@company.com\nO use el modo solo reglas: stein convert myfile.sql",
+      "complete": "{converted}/{total} objetos convertidos",
+      "forwarded": "{count} objetos enviados a la IA"
+    },
+    "verify": {
+      "help": "Verificar la salida PostgreSQL/Oracle convertida",
+      "verifying": "Verificando {count} archivos...",
+      "green": "VERDE — alta confianza",
+      "yellow": "AMARILLO — revisión recomendada",
+      "red": "ROJO — corrección manual necesaria"
+    },
+    "auth": {
+      "register_help": "Registrar una cuenta SteinDB gratuita",
+      "register_success": "¡Registro exitoso!",
+      "register_prompt": "Dirección de correo electrónico",
+      "login_help": "Iniciar sesión con un token existente",
+      "logout_help": "Eliminar token almacenado",
+      "logout_success": "Sesión cerrada. El modo solo reglas sigue funcionando sin token.",
+      "status_help": "Mostrar estado de autenticación actual",
+      "status_authenticated": "Autenticado",
+      "status_not_authenticated": "No autenticado",
+      "upgrade_help": "Actualizar su cuenta a un plan de pago"
+    }
+  },
+  "errors": {
+    "file_not_found": "Archivo no encontrado: {path}",
+    "invalid_sql": "Entrada SQL inválida",
+    "connection_failed": "Error de conexión: {error}",
+    "no_objects": "No se encontraron objetos en la entrada"
+  },
+  "report": {
+    "title": "Informe de Migración SteinDB",
+    "summary": "Resumen",
+    "total_objects": "Total de Objetos",
+    "auto_convertible": "Convertible automáticamente",
+    "needs_ai": "Necesita asistencia de IA",
+    "complexity_avg": "Complejidad Promedio",
+    "savings_estimate": "Ahorro Estimado"
+  }
+}

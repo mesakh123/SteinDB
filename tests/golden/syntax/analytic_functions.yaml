@@ -1,0 +1,179 @@
+# =============================================================================
+# SteinDB Golden Tests — Analytic Function Differences (O2P)
+# Extended analytic/window function patterns from reviewer feedback
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# CUME_DIST — compatible but test coverage needed
+# ---------------------------------------------------------------------------
+
+- name: cume_dist_basic
+  category: syntax
+  oracle: >-
+    SELECT employee_id, salary,
+      CUME_DIST() OVER (ORDER BY salary) AS cum_dist
+    FROM employees
+  expected_postgresql: >-
+    SELECT employee_id, salary,
+      CUME_DIST() OVER (ORDER BY salary) AS cum_dist
+    FROM employees
+  complexity: 2
+  constructs: ["CUME_DIST"]
+  tags: ["analytic", "no_change", "reviewer_gap"]
+  acceptance_criteria:
+    - "CUME_DIST works identically in Oracle and PG"
+
+- name: ntile_basic
+  category: syntax
+  oracle: >-
+    SELECT employee_id, salary,
+      NTILE(4) OVER (ORDER BY salary DESC) AS quartile
+    FROM employees
+  expected_postgresql: >-
+    SELECT employee_id, salary,
+      NTILE(4) OVER (ORDER BY salary DESC) AS quartile
+    FROM employees
+  complexity: 2
+  constructs: ["NTILE"]
+  tags: ["analytic", "no_change", "reviewer_gap"]
+  acceptance_criteria:
+    - "NTILE works identically in Oracle and PG"
+
+- name: listagg_with_overflow
+  category: syntax
+  oracle: >-
+    SELECT department_id,
+      LISTAGG(employee_name, ', ') WITHIN GROUP (ORDER BY hire_date)
+      ON OVERFLOW TRUNCATE '...' WITH COUNT
+    FROM employees GROUP BY department_id
+  expected_postgresql: >-
+    SELECT department_id,
+      STRING_AGG(employee_name, ', ' ORDER BY hire_date)
+    FROM employees GROUP BY department_id
+  complexity: 5
+  constructs: ["LISTAGG", "ON OVERFLOW"]
+  tags: ["analytic", "aggregate", "reviewer_gap"]
+  acceptance_criteria:
+    - "LISTAGG maps to STRING_AGG in PG"
+    - "ON OVERFLOW TRUNCATE has no PG equivalent; silently dropped"
+    - "PG STRING_AGG has no built-in overflow handling"
+
+- name: listagg_distinct
+  category: syntax
+  oracle: >-
+    SELECT department_id,
+      LISTAGG(DISTINCT job_title, ', ') WITHIN GROUP (ORDER BY job_title)
+    FROM employees GROUP BY department_id
+  expected_postgresql: >-
+    SELECT department_id,
+      STRING_AGG(DISTINCT job_title, ', ' ORDER BY job_title)
+    FROM employees GROUP BY department_id
+  complexity: 4
+  constructs: ["LISTAGG", "DISTINCT"]
+  tags: ["analytic", "aggregate", "reviewer_gap"]
+  acceptance_criteria:
+    - "LISTAGG DISTINCT (Oracle 19c+) maps to STRING_AGG DISTINCT"
+
+- name: first_value_ignore_nulls
+  category: syntax
+  oracle: >-
+    SELECT employee_id,
+      FIRST_VALUE(commission_pct IGNORE NULLS)
+        OVER (PARTITION BY department_id ORDER BY hire_date) AS first_comm
+    FROM employees
+  expected_postgresql: >-
+    SELECT employee_id,
+      FIRST_VALUE(commission_pct)
+        OVER (PARTITION BY department_id ORDER BY
+          CASE WHEN commission_pct IS NOT NULL THEN hire_date END NULLS LAST) AS first_comm
+    FROM employees
+  complexity: 7
+  constructs: ["FIRST_VALUE", "IGNORE NULLS"]
+  tags: ["analytic", "null_handling", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle IGNORE NULLS in window functions has no direct PG equivalent"
+    - "Workaround: adjust ORDER BY to push NULLs to end"
+
+- name: last_value_ignore_nulls
+  category: syntax
+  oracle: >-
+    SELECT employee_id,
+      LAST_VALUE(commission_pct IGNORE NULLS)
+        OVER (PARTITION BY department_id ORDER BY hire_date
+              ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS last_comm
+    FROM employees
+  expected_postgresql: >-
+    SELECT employee_id,
+      LAST_VALUE(commission_pct)
+        OVER (PARTITION BY department_id ORDER BY
+          CASE WHEN commission_pct IS NOT NULL THEN hire_date END NULLS FIRST
+              ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS last_comm
+    FROM employees
+  complexity: 7
+  constructs: ["LAST_VALUE", "IGNORE NULLS"]
+  tags: ["analytic", "null_handling", "reviewer_gap"]
+  acceptance_criteria:
+    - "LAST_VALUE with IGNORE NULLS needs ORDER BY adjustment in PG"
+
+- name: percentile_cont_analytic
+  category: syntax
+  oracle: >-
+    SELECT department_id,
+      PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY salary) AS median_salary
+    FROM employees GROUP BY department_id
+  expected_postgresql: >-
+    SELECT department_id,
+      PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY salary) AS median_salary
+    FROM employees GROUP BY department_id
+  complexity: 2
+  constructs: ["PERCENTILE_CONT"]
+  tags: ["analytic", "no_change", "reviewer_gap"]
+  acceptance_criteria:
+    - "PERCENTILE_CONT is compatible between Oracle and PG"
+
+- name: width_bucket
+  category: syntax
+  oracle: "SELECT WIDTH_BUCKET(salary, 0, 200000, 10) AS bucket FROM employees"
+  expected_postgresql: "SELECT WIDTH_BUCKET(salary, 0, 200000, 10) AS bucket FROM employees"
+  complexity: 1
+  constructs: ["WIDTH_BUCKET"]
+  tags: ["analytic", "no_change", "reviewer_gap"]
+  acceptance_criteria:
+    - "WIDTH_BUCKET works identically in Oracle and PG"
+
+- name: lag_lead_default
+  category: syntax
+  oracle: >-
+    SELECT employee_id,
+      LAG(salary, 1, 0) OVER (ORDER BY hire_date) AS prev_salary,
+      LEAD(salary, 1, 0) OVER (ORDER BY hire_date) AS next_salary
+    FROM employees
+  expected_postgresql: >-
+    SELECT employee_id,
+      LAG(salary, 1, 0) OVER (ORDER BY hire_date) AS prev_salary,
+      LEAD(salary, 1, 0) OVER (ORDER BY hire_date) AS next_salary
+    FROM employees
+  complexity: 2
+  constructs: ["LAG", "LEAD"]
+  tags: ["analytic", "no_change", "reviewer_gap"]
+  acceptance_criteria:
+    - "LAG and LEAD with default values work identically"
+
+- name: rows_between_range_between
+  category: syntax
+  oracle: >-
+    SELECT employee_id,
+      AVG(salary) OVER (ORDER BY hire_date
+        RANGE BETWEEN INTERVAL '90' DAY PRECEDING AND CURRENT ROW) AS avg_90d
+    FROM employees
+  expected_postgresql: >-
+    SELECT employee_id,
+      AVG(salary) OVER (ORDER BY hire_date
+        RANGE BETWEEN INTERVAL '90 days' PRECEDING AND CURRENT ROW) AS avg_90d
+    FROM employees
+  complexity: 4
+  constructs: ["RANGE BETWEEN", "INTERVAL"]
+  tags: ["analytic", "interval", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle INTERVAL '90' DAY maps to PG INTERVAL '90 days'"
+    - "RANGE BETWEEN syntax is otherwise compatible"

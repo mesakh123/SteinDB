@@ -1,0 +1,20 @@
+- name: autonomous_logging
+  category: autonomous_txn
+  complexity: 8
+  constructs: ["AUTONOMOUS_TRANSACTION"]
+  oracle: |
+    CREATE OR REPLACE PROCEDURE log_error(p_msg VARCHAR2) IS
+      PRAGMA AUTONOMOUS_TRANSACTION;
+    BEGIN
+      INSERT INTO error_log (message, logged_at) VALUES (p_msg, SYSDATE);
+      COMMIT;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE log_error(p_msg VARCHAR)
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      PERFORM dblink_exec('dbname=' || current_database(),
+        'INSERT INTO error_log (message, logged_at) VALUES (' ||
+        quote_literal(p_msg) || ', CURRENT_TIMESTAMP)');
+    END;
+    $$;

@@ -1,0 +1,187 @@
+# Oracle CONNECT BY hierarchical queries → PostgreSQL WITH RECURSIVE
+# Reference: CYBERTEC Oracle-to-PostgreSQL migration guide
+
+- name: simple_connect_by_prior
+  category: syntax
+  oracle: >
+    SELECT employee_id, manager_id, name
+    FROM employees
+    CONNECT BY PRIOR employee_id = manager_id
+  expected_postgresql: >
+    WITH RECURSIVE emp_hierarchy AS (
+      SELECT employee_id, manager_id, name
+      FROM employees
+      WHERE manager_id IS NULL
+      UNION ALL
+      SELECT e.employee_id, e.manager_id, e.name
+      FROM employees e
+      INNER JOIN emp_hierarchy h ON h.employee_id = e.manager_id
+    )
+    SELECT employee_id, manager_id, name FROM emp_hierarchy
+  complexity: 7
+  constructs: ["CONNECT_BY"]
+  tags: ["cybertec", "hierarchical"]
+
+- name: connect_by_with_start_with
+  category: syntax
+  oracle: >
+    SELECT employee_id, manager_id, name
+    FROM employees
+    START WITH manager_id IS NULL
+    CONNECT BY PRIOR employee_id = manager_id
+  expected_postgresql: >
+    WITH RECURSIVE emp_hierarchy AS (
+      SELECT employee_id, manager_id, name
+      FROM employees
+      WHERE manager_id IS NULL
+      UNION ALL
+      SELECT e.employee_id, e.manager_id, e.name
+      FROM employees e
+      INNER JOIN emp_hierarchy h ON h.employee_id = e.manager_id
+    )
+    SELECT employee_id, manager_id, name FROM emp_hierarchy
+  complexity: 7
+  constructs: ["CONNECT_BY", "START_WITH"]
+  tags: ["cybertec", "hierarchical"]
+
+- name: connect_by_with_level
+  category: syntax
+  oracle: >
+    SELECT employee_id, name, LEVEL AS depth
+    FROM employees
+    START WITH manager_id IS NULL
+    CONNECT BY PRIOR employee_id = manager_id
+  expected_postgresql: >
+    WITH RECURSIVE emp_hierarchy AS (
+      SELECT employee_id, name, manager_id, 1 AS depth
+      FROM employees
+      WHERE manager_id IS NULL
+      UNION ALL
+      SELECT e.employee_id, e.name, e.manager_id, h.depth + 1
+      FROM employees e
+      INNER JOIN emp_hierarchy h ON h.employee_id = e.manager_id
+    )
+    SELECT employee_id, name, depth FROM emp_hierarchy
+  complexity: 8
+  constructs: ["CONNECT_BY", "LEVEL"]
+  tags: ["cybertec", "hierarchical"]
+
+- name: sys_connect_by_path
+  category: syntax
+  oracle: >
+    SELECT employee_id, SYS_CONNECT_BY_PATH(name, '/') AS path
+    FROM employees
+    START WITH manager_id IS NULL
+    CONNECT BY PRIOR employee_id = manager_id
+  expected_postgresql: >
+    WITH RECURSIVE emp_hierarchy AS (
+      SELECT employee_id, name, manager_id, '/' || name AS path
+      FROM employees
+      WHERE manager_id IS NULL
+      UNION ALL
+      SELECT e.employee_id, e.name, e.manager_id, h.path || '/' || e.name
+      FROM employees e
+      INNER JOIN emp_hierarchy h ON h.employee_id = e.manager_id
+    )
+    SELECT employee_id, path FROM emp_hierarchy
+  complexity: 9
+  constructs: ["CONNECT_BY", "SYS_CONNECT_BY_PATH"]
+  tags: ["cybertec", "hierarchical"]
+
+- name: connect_by_root
+  category: syntax
+  oracle: >
+    SELECT employee_id, CONNECT_BY_ROOT name AS root_name
+    FROM employees
+    START WITH manager_id IS NULL
+    CONNECT BY PRIOR employee_id = manager_id
+  expected_postgresql: >
+    WITH RECURSIVE emp_hierarchy AS (
+      SELECT employee_id, name, manager_id, name AS root_name
+      FROM employees
+      WHERE manager_id IS NULL
+      UNION ALL
+      SELECT e.employee_id, e.name, e.manager_id, h.root_name
+      FROM employees e
+      INNER JOIN emp_hierarchy h ON h.employee_id = e.manager_id
+    )
+    SELECT employee_id, root_name FROM emp_hierarchy
+  complexity: 9
+  constructs: ["CONNECT_BY", "CONNECT_BY_ROOT"]
+  tags: ["cybertec", "hierarchical"]
+
+- name: connect_by_nocycle
+  category: syntax
+  oracle: >
+    SELECT employee_id, manager_id, name
+    FROM employees
+    START WITH manager_id IS NULL
+    CONNECT BY NOCYCLE PRIOR employee_id = manager_id
+  expected_postgresql: >
+    WITH RECURSIVE emp_hierarchy AS (
+      SELECT employee_id, manager_id, name, ARRAY[employee_id] AS visited
+      FROM employees
+      WHERE manager_id IS NULL
+      UNION ALL
+      SELECT e.employee_id, e.manager_id, e.name, h.visited || e.employee_id
+      FROM employees e
+      INNER JOIN emp_hierarchy h ON h.employee_id = e.manager_id
+      WHERE e.employee_id <> ALL(h.visited)
+    )
+    SELECT employee_id, manager_id, name FROM emp_hierarchy
+  complexity: 10
+  constructs: ["CONNECT_BY", "NOCYCLE"]
+  tags: ["cybertec", "hierarchical"]
+
+- name: connect_by_order_siblings_by
+  category: syntax
+  oracle: >
+    SELECT employee_id, name, LEVEL AS depth
+    FROM employees
+    START WITH manager_id IS NULL
+    CONNECT BY PRIOR employee_id = manager_id
+    ORDER SIBLINGS BY name
+  expected_postgresql: >
+    WITH RECURSIVE emp_hierarchy AS (
+      SELECT employee_id, name, manager_id, 1 AS depth,
+             ARRAY[name] AS sort_path
+      FROM employees
+      WHERE manager_id IS NULL
+      UNION ALL
+      SELECT e.employee_id, e.name, e.manager_id, h.depth + 1,
+             h.sort_path || e.name
+      FROM employees e
+      INNER JOIN emp_hierarchy h ON h.employee_id = e.manager_id
+    )
+    SELECT employee_id, name, depth FROM emp_hierarchy
+    ORDER BY sort_path
+  complexity: 10
+  constructs: ["CONNECT_BY", "ORDER_SIBLINGS_BY"]
+  tags: ["cybertec", "hierarchical"]
+
+- name: complex_hierarchy_multiple_conditions
+  category: syntax
+  oracle: >
+    SELECT employee_id, name, LEVEL AS depth,
+           SYS_CONNECT_BY_PATH(name, ' > ') AS path,
+           CONNECT_BY_ROOT name AS ceo_name
+    FROM employees
+    START WITH manager_id IS NULL AND active = 'Y'
+    CONNECT BY PRIOR employee_id = manager_id AND active = 'Y'
+  expected_postgresql: >
+    WITH RECURSIVE emp_hierarchy AS (
+      SELECT employee_id, name, manager_id, active, 1 AS depth,
+             ' > ' || name AS path, name AS ceo_name
+      FROM employees
+      WHERE manager_id IS NULL AND active = 'Y'
+      UNION ALL
+      SELECT e.employee_id, e.name, e.manager_id, e.active, h.depth + 1,
+             h.path || ' > ' || e.name, h.ceo_name
+      FROM employees e
+      INNER JOIN emp_hierarchy h ON h.employee_id = e.manager_id
+      WHERE e.active = 'Y'
+    )
+    SELECT employee_id, name, depth, path, ceo_name FROM emp_hierarchy
+  complexity: 12
+  constructs: ["CONNECT_BY", "LEVEL", "SYS_CONNECT_BY_PATH", "CONNECT_BY_ROOT", "START_WITH"]
+  tags: ["cybertec", "hierarchical"]

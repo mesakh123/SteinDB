@@ -1,0 +1,58 @@
+{
+  "app_name": "SteinDB",
+  "tagline": "A única ferramenta de migração bidirecional Oracle ↔ PostgreSQL",
+  "directions": {
+    "o2p": "Oracle para PostgreSQL",
+    "p2o": "PostgreSQL para Oracle"
+  },
+  "tiers": {
+    "free": "Gratuito",
+    "registered": "Registrado",
+    "solo": "Solo",
+    "team": "Equipe",
+    "enterprise": "Empresarial"
+  },
+  "roles": {
+    "owner": "Proprietário",
+    "admin": "Administrador",
+    "member": "Membro",
+    "viewer": "Visualizador"
+  },
+  "actions": {
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "delete": "Excluir",
+    "edit": "Editar",
+    "create": "Criar",
+    "search": "Pesquisar",
+    "filter": "Filtrar",
+    "export": "Exportar",
+    "download": "Baixar",
+    "copy": "Copiar",
+    "copied": "Copiado!",
+    "loading": "Carregando...",
+    "submit": "Enviar",
+    "confirm": "Confirmar",
+    "back": "Voltar",
+    "next": "Próximo",
+    "upgrade": "Atualizar plano",
+    "register": "Registrar",
+    "login": "Entrar",
+    "logout": "Sair"
+  },
+  "status": {
+    "active": "Ativo",
+    "inactive": "Inativo",
+    "success": "Sucesso",
+    "failed": "Falhou",
+    "partial": "Parcial",
+    "pending": "Pendente"
+  },
+  "time": {
+    "just_now": "agora mesmo",
+    "minutes_ago": "há {n} minutos",
+    "hours_ago": "há {n} horas",
+    "days_ago": "há {n} dias",
+    "yesterday": "ontem"
+  }
+}

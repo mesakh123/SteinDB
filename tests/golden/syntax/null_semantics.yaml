@@ -1,0 +1,95 @@
+# Oracle NULL = empty string semantics → PostgreSQL explicit NULL handling
+# Reference: CYBERTEC Oracle-to-PostgreSQL migration guide
+# In Oracle, NULL and '' are equivalent; in PostgreSQL they are distinct.
+
+- name: string_concat_with_null
+  category: syntax
+  oracle: "SELECT col1 || col2 FROM t"
+  expected_postgresql: "SELECT concat(col1, col2) FROM t"
+  complexity: 3
+  constructs: ["NULL_CONCAT"]
+  tags: ["cybertec", "null_semantics"]
+  acceptance_criteria:
+    - "concat() returns non-null even when one operand is NULL, matching Oracle behavior"
+
+- name: empty_string_comparison
+  category: syntax
+  oracle: "SELECT * FROM employees WHERE name = ''"
+  expected_postgresql: "SELECT * FROM employees WHERE name = '' OR name IS NULL"
+  complexity: 3
+  constructs: ["NULL_EMPTY_STRING"]
+  tags: ["cybertec", "null_semantics"]
+  acceptance_criteria:
+    - "Oracle treats '' as NULL, so PostgreSQL must check for both"
+
+- name: nvl_with_empty_string
+  category: syntax
+  oracle: "SELECT NVL(notes, '') FROM orders"
+  expected_postgresql: "SELECT COALESCE(notes, '') FROM orders"
+  complexity: 2
+  constructs: ["NVL", "NULL_EMPTY_STRING"]
+  tags: ["cybertec", "null_semantics"]
+
+- name: null_in_arithmetic
+  category: syntax
+  oracle: "SELECT price + NVL(discount, 0) FROM products"
+  expected_postgresql: "SELECT price + COALESCE(discount, 0) FROM products"
+  complexity: 2
+  constructs: ["NVL", "NULL_ARITHMETIC"]
+  tags: ["cybertec", "null_semantics"]
+
+- name: null_in_decode
+  category: syntax
+  oracle: "SELECT DECODE(status, NULL, 'Missing', status) FROM t"
+  expected_postgresql: "SELECT CASE WHEN status IS NULL THEN 'Missing' ELSE status END FROM t"
+  complexity: 3
+  constructs: ["DECODE", "NULL_COMPARE"]
+  tags: ["cybertec", "null_semantics"]
+  acceptance_criteria:
+    - "DECODE with NULL comparison uses IS NULL in CASE expression"
+
+- name: is_null_vs_empty_string_equivalence
+  category: syntax
+  oracle: "SELECT * FROM t WHERE col IS NULL"
+  expected_postgresql: "SELECT * FROM t WHERE col IS NULL OR col = ''"
+  complexity: 3
+  constructs: ["NULL_EMPTY_STRING"]
+  tags: ["cybertec", "null_semantics"]
+  acceptance_criteria:
+    - "Only applies to VARCHAR/CHAR columns; numeric columns keep IS NULL only"
+
+- name: nullif_pattern
+  category: syntax
+  oracle: "SELECT NULLIF(col1, col2) FROM t"
+  expected_postgresql: "SELECT NULLIF(col1, col2) FROM t"
+  complexity: 1
+  constructs: ["NULLIF"]
+  tags: ["cybertec", "null_semantics", "no_change"]
+
+- name: nvl2_with_null
+  category: syntax
+  oracle: "SELECT NVL2(email, 'Has email', 'No email') FROM employees"
+  expected_postgresql: "SELECT CASE WHEN email IS NOT NULL THEN 'Has email' ELSE 'No email' END FROM employees"
+  complexity: 3
+  constructs: ["NVL2"]
+  tags: ["cybertec", "null_semantics"]
+
+- name: concat_chain_with_potential_nulls
+  category: syntax
+  oracle: "SELECT first_name || ' ' || middle_name || ' ' || last_name FROM employees"
+  expected_postgresql: "SELECT concat(first_name, ' ', middle_name, ' ', last_name) FROM employees"
+  complexity: 4
+  constructs: ["NULL_CONCAT"]
+  tags: ["cybertec", "null_semantics"]
+  acceptance_criteria:
+    - "concat() handles NULLs gracefully; || in PostgreSQL would return NULL if any part is NULL"
+
+- name: trim_with_null
+  category: syntax
+  oracle: "SELECT TRIM(col), LTRIM(col), RTRIM(col) FROM t"
+  expected_postgresql: "SELECT TRIM(col), LTRIM(col), RTRIM(col) FROM t"
+  complexity: 1
+  constructs: ["TRIM"]
+  tags: ["cybertec", "null_semantics", "no_change"]
+  acceptance_criteria:
+    - "TRIM/LTRIM/RTRIM behave the same but return NULL for NULL input in both databases"

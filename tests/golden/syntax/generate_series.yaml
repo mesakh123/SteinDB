@@ -1,0 +1,75 @@
+# Golden tests: Oracle CONNECT BY level / DUAL iterator patterns -> PostgreSQL generate_series()
+
+- name: connect_by_level_to_generate_series
+  category: syntax
+  oracle: "SELECT level AS n FROM DUAL CONNECT BY level <= 10"
+  expected_postgresql: "SELECT generate_series(1, 10) AS n"
+  complexity: 3
+  constructs: ["CONNECT BY", "LEVEL", "DUAL"]
+  tags: ["generate_series", "iterator"]
+
+- name: number_sequence_with_step
+  category: syntax
+  oracle: "SELECT level * 5 AS n FROM DUAL CONNECT BY level <= 20"
+  expected_postgresql: "SELECT generate_series(5, 100, 5) AS n"
+  complexity: 4
+  constructs: ["CONNECT BY", "LEVEL", "DUAL"]
+  tags: ["generate_series", "iterator"]
+
+- name: date_series_generation
+  category: syntax
+  oracle: >
+    SELECT TRUNC(SYSDATE) + level - 1 AS dt
+    FROM DUAL
+    CONNECT BY level <= 30
+  expected_postgresql: >
+    SELECT d::DATE AS dt
+    FROM generate_series(
+      CURRENT_DATE,
+      CURRENT_DATE + INTERVAL '29 days',
+      INTERVAL '1 day'
+    ) AS d
+  complexity: 5
+  constructs: ["CONNECT BY", "LEVEL", "DUAL", "SYSDATE", "DATE_ARITHMETIC"]
+  tags: ["generate_series", "iterator", "date_series"]
+
+- name: row_multiplication_pattern
+  category: syntax
+  oracle: >
+    SELECT e.id, e.name, t.n AS copy_num
+    FROM employees e,
+         (SELECT level AS n FROM DUAL CONNECT BY level <= 3) t
+  expected_postgresql: >
+    SELECT e.id, e.name, t.n AS copy_num
+    FROM employees e
+    CROSS JOIN generate_series(1, 3) AS t(n)
+  complexity: 5
+  constructs: ["CONNECT BY", "LEVEL", "DUAL", "CROSS_JOIN"]
+  tags: ["generate_series", "iterator"]
+
+- name: rownum_limit_to_generate_series
+  category: syntax
+  oracle: "SELECT rownum AS rn FROM DUAL CONNECT BY rownum <= 100"
+  expected_postgresql: "SELECT generate_series(1, 100) AS rn"
+  complexity: 3
+  constructs: ["CONNECT BY", "ROWNUM", "DUAL"]
+  tags: ["generate_series", "iterator"]
+
+- name: generate_series_in_insert
+  category: syntax
+  oracle: >
+    INSERT INTO calendar_days (day_date, day_num)
+    SELECT TRUNC(SYSDATE, 'YEAR') + level - 1, level
+    FROM DUAL
+    CONNECT BY level <= 365
+  expected_postgresql: >
+    INSERT INTO calendar_days (day_date, day_num)
+    SELECT d::DATE, ROW_NUMBER() OVER (ORDER BY d)
+    FROM generate_series(
+      DATE_TRUNC('year', CURRENT_DATE),
+      DATE_TRUNC('year', CURRENT_DATE) + INTERVAL '364 days',
+      INTERVAL '1 day'
+    ) AS d
+  complexity: 6
+  constructs: ["CONNECT BY", "LEVEL", "DUAL", "SYSDATE", "INSERT_SELECT"]
+  tags: ["generate_series", "iterator", "date_series"]

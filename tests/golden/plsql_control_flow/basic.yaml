@@ -1,0 +1,189 @@
+- name: if_then_else
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE check_salary(p_emp_id NUMBER) IS
+      v_salary NUMBER;
+    BEGIN
+      SELECT salary INTO v_salary FROM employees WHERE id = p_emp_id;
+      IF v_salary > 100000 THEN
+        DBMS_OUTPUT.PUT_LINE('High earner');
+      ELSIF v_salary > 50000 THEN
+        DBMS_OUTPUT.PUT_LINE('Mid earner');
+      ELSE
+        DBMS_OUTPUT.PUT_LINE('Low earner');
+      END IF;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE check_salary(p_emp_id INTEGER)
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_salary NUMERIC;
+    BEGIN
+      SELECT salary INTO v_salary FROM employees WHERE id = p_emp_id;
+      IF v_salary > 100000 THEN
+        RAISE NOTICE 'High earner';
+      ELSIF v_salary > 50000 THEN
+        RAISE NOTICE 'Mid earner';
+      ELSE
+        RAISE NOTICE 'Low earner';
+      END IF;
+    END;
+    $$;
+  complexity: 3
+  constructs: ["IF", "ELSIF", "DBMS_OUTPUT"]
+
+- name: simple_loop
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE count_up IS
+      v_counter NUMBER := 0;
+    BEGIN
+      LOOP
+        v_counter := v_counter + 1;
+        EXIT WHEN v_counter >= 10;
+      END LOOP;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE count_up()
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_counter INTEGER := 0;
+    BEGIN
+      LOOP
+        v_counter := v_counter + 1;
+        EXIT WHEN v_counter >= 10;
+      END LOOP;
+    END;
+    $$;
+  complexity: 2
+  constructs: ["LOOP", "EXIT WHEN"]
+
+- name: while_loop
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE process_batch IS
+      v_done BOOLEAN := FALSE;
+    BEGIN
+      WHILE NOT v_done LOOP
+        v_done := TRUE;
+      END LOOP;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE process_batch()
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_done BOOLEAN := FALSE;
+    BEGIN
+      WHILE NOT v_done LOOP
+        v_done := TRUE;
+      END LOOP;
+    END;
+    $$;
+  complexity: 2
+  constructs: ["WHILE LOOP"]
+
+- name: for_loop
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE sum_range IS
+      v_total NUMBER := 0;
+    BEGIN
+      FOR i IN 1..100 LOOP
+        v_total := v_total + i;
+      END LOOP;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE sum_range()
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_total INTEGER := 0;
+    BEGIN
+      FOR i IN 1..100 LOOP
+        v_total := v_total + i;
+      END LOOP;
+    END;
+    $$;
+  complexity: 2
+  constructs: ["FOR LOOP"]
+
+- name: cursor_for_loop
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE list_employees IS
+    BEGIN
+      FOR rec IN (SELECT id, name FROM employees) LOOP
+        DBMS_OUTPUT.PUT_LINE(rec.name);
+      END LOOP;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE list_employees()
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      rec RECORD;
+    BEGIN
+      FOR rec IN SELECT id, name FROM employees LOOP
+        RAISE NOTICE '%', rec.name;
+      END LOOP;
+    END;
+    $$;
+  complexity: 4
+  constructs: ["CURSOR FOR LOOP", "DBMS_OUTPUT"]
+
+- name: exception_handling
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE FUNCTION safe_divide(a NUMBER, b NUMBER) RETURN NUMBER IS
+    BEGIN
+      RETURN a / b;
+    EXCEPTION
+      WHEN ZERO_DIVIDE THEN
+        RETURN NULL;
+      WHEN OTHERS THEN
+        RAISE_APPLICATION_ERROR(-20001, 'Unexpected error: ' || SQLERRM);
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION safe_divide(a NUMERIC, b NUMERIC) RETURNS NUMERIC
+    LANGUAGE plpgsql AS $$
+    BEGIN
+      RETURN a / b;
+    EXCEPTION
+      WHEN division_by_zero THEN
+        RETURN NULL;
+      WHEN OTHERS THEN
+        RAISE EXCEPTION 'Unexpected error: %', SQLERRM;
+    END;
+    $$;
+  complexity: 4
+  constructs: ["EXCEPTION", "ZERO_DIVIDE", "WHEN OTHERS", "SQLERRM"]
+
+- name: exit_when
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE find_first IS
+      v_id NUMBER;
+      CURSOR c_emp IS SELECT id FROM employees ORDER BY id;
+    BEGIN
+      OPEN c_emp;
+      LOOP
+        FETCH c_emp INTO v_id;
+        EXIT WHEN c_emp%NOTFOUND;
+      END LOOP;
+      CLOSE c_emp;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE find_first()
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_id INTEGER;
+      c_emp CURSOR FOR SELECT id FROM employees ORDER BY id;
+    BEGIN
+      OPEN c_emp;
+      LOOP
+        FETCH c_emp INTO v_id;
+        EXIT WHEN NOT FOUND;
+      END LOOP;
+      CLOSE c_emp;
+    END;
+    $$;
+  complexity: 5
+  constructs: ["CURSOR", "FETCH", "%NOTFOUND", "EXIT WHEN"]

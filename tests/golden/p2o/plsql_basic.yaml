@@ -1,0 +1,251 @@
+# =============================================================================
+# SteinDB Golden Tests — P2O PL/pgSQL → PL/SQL Conversions (Basic)
+# PostgreSQL procedural code to Oracle PL/SQL
+# From issues.md Section 4
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# RETURNS → RETURN
+# ---------------------------------------------------------------------------
+
+- name: returns_to_return
+  category: p2o_plsql
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION get_name(p_id INTEGER)
+    RETURNS VARCHAR AS $$
+    BEGIN
+      RETURN (SELECT name FROM users WHERE id = p_id);
+    END;
+    $$ LANGUAGE plpgsql
+  expected: >-
+    CREATE OR REPLACE FUNCTION get_name(p_id NUMBER)
+    RETURN VARCHAR2 IS
+    v_result VARCHAR2(4000);
+    BEGIN
+      SELECT name INTO v_result FROM users WHERE id = p_id;
+      RETURN v_result;
+    END;
+  complexity: 5
+  constructs: ["RETURNS", "FUNCTION", "DOLLAR_QUOTING"]
+  tags: ["p2o", "plsql", "function"]
+  acceptance_criteria:
+    - "PG RETURNS keyword becomes Oracle RETURN"
+    - "Dollar-quoting removed; Oracle uses IS...BEGIN...END"
+
+# ---------------------------------------------------------------------------
+# AS $$ ... $$ LANGUAGE plpgsql → IS ... BEGIN...END;
+# ---------------------------------------------------------------------------
+
+- name: dollar_quoting_to_is_block
+  category: p2o_plsql
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION add_numbers(a INTEGER, b INTEGER)
+    RETURNS INTEGER AS $$
+    BEGIN
+      RETURN a + b;
+    END;
+    $$ LANGUAGE plpgsql
+  expected: >-
+    CREATE OR REPLACE FUNCTION add_numbers(a NUMBER, b NUMBER)
+    RETURN NUMBER IS
+    BEGIN
+      RETURN a + b;
+    END;
+  complexity: 3
+  constructs: ["DOLLAR_QUOTING", "LANGUAGE_PLPGSQL"]
+  tags: ["p2o", "plsql", "function"]
+  acceptance_criteria:
+    - "Remove $$ ... $$ LANGUAGE plpgsql wrapper"
+    - "Replace AS with IS for Oracle PL/SQL syntax"
+
+# ---------------------------------------------------------------------------
+# RAISE NOTICE → DBMS_OUTPUT.PUT_LINE
+# ---------------------------------------------------------------------------
+
+- name: raise_notice_to_dbms_output
+  category: p2o_plsql
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION log_action(msg TEXT)
+    RETURNS VOID AS $$
+    BEGIN
+      RAISE NOTICE 'Action: %', msg;
+    END;
+    $$ LANGUAGE plpgsql
+  expected: >-
+    CREATE OR REPLACE PROCEDURE log_action(msg VARCHAR2) IS
+    BEGIN
+      DBMS_OUTPUT.PUT_LINE('Action: ' || msg);
+    END;
+  complexity: 4
+  constructs: ["RAISE_NOTICE", "DBMS_OUTPUT"]
+  tags: ["p2o", "plsql", "logging"]
+  acceptance_criteria:
+    - "RAISE NOTICE maps to DBMS_OUTPUT.PUT_LINE"
+    - "% format placeholders must be replaced with concatenation"
+    - "RETURNS VOID function becomes Oracle PROCEDURE"
+
+# ---------------------------------------------------------------------------
+# RAISE EXCEPTION → RAISE_APPLICATION_ERROR
+# ---------------------------------------------------------------------------
+
+- name: raise_exception_to_raise_application_error
+  category: p2o_plsql
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION validate_age(p_age INTEGER)
+    RETURNS VOID AS $$
+    BEGIN
+      IF p_age < 0 THEN
+        RAISE EXCEPTION 'Age cannot be negative: %', p_age;
+      END IF;
+    END;
+    $$ LANGUAGE plpgsql
+  expected: >-
+    CREATE OR REPLACE PROCEDURE validate_age(p_age NUMBER) IS
+    BEGIN
+      IF p_age < 0 THEN
+        RAISE_APPLICATION_ERROR(-20001, 'Age cannot be negative: ' || p_age);
+      END IF;
+    END;
+  complexity: 5
+  constructs: ["RAISE_EXCEPTION", "RAISE_APPLICATION_ERROR"]
+  tags: ["p2o", "plsql", "error_handling"]
+  acceptance_criteria:
+    - "RAISE EXCEPTION maps to RAISE_APPLICATION_ERROR"
+    - "Must assign error code in range -20000 to -20999"
+    - "% format placeholders replaced with || concatenation"
+
+# ---------------------------------------------------------------------------
+# NEW.col → :NEW.col (trigger context)
+# ---------------------------------------------------------------------------
+
+- name: new_reference_to_colon_new
+  category: p2o_plsql
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION trg_set_updated()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      NEW.updated_at := CURRENT_TIMESTAMP;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql
+  expected: >-
+    CREATE OR REPLACE TRIGGER trg_set_updated
+    BEFORE UPDATE ON target_table
+    FOR EACH ROW
+    BEGIN
+      :NEW.updated_at := SYSTIMESTAMP;
+    END;
+  complexity: 5
+  constructs: ["TRIGGER", "NEW_REFERENCE"]
+  tags: ["p2o", "plsql", "triggers"]
+  acceptance_criteria:
+    - "PG NEW.col becomes Oracle :NEW.col in triggers"
+    - "PG trigger functions are separate; Oracle trigger is inline"
+    - "CURRENT_TIMESTAMP maps to SYSTIMESTAMP"
+
+# ---------------------------------------------------------------------------
+# EXECUTE sql → EXECUTE IMMEDIATE sql
+# ---------------------------------------------------------------------------
+
+- name: execute_to_execute_immediate
+  category: p2o_plsql
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION run_dynamic(p_sql TEXT)
+    RETURNS VOID AS $$
+    BEGIN
+      EXECUTE p_sql;
+    END;
+    $$ LANGUAGE plpgsql
+  expected: >-
+    CREATE OR REPLACE PROCEDURE run_dynamic(p_sql VARCHAR2) IS
+    BEGIN
+      EXECUTE IMMEDIATE p_sql;
+    END;
+  complexity: 4
+  constructs: ["EXECUTE", "EXECUTE_IMMEDIATE", "DYNAMIC_SQL"]
+  tags: ["p2o", "plsql", "dynamic_sql"]
+  acceptance_criteria:
+    - "PG EXECUTE becomes Oracle EXECUTE IMMEDIATE"
+    - "Both support bind variables but syntax differs"
+
+# ---------------------------------------------------------------------------
+# SELECT INTO STRICT → SELECT INTO (remove STRICT)
+# ---------------------------------------------------------------------------
+
+- name: select_into_strict_removal
+  category: p2o_plsql
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION get_balance(p_id INTEGER)
+    RETURNS NUMERIC AS $$
+    DECLARE
+      v_balance NUMERIC;
+    BEGIN
+      SELECT balance INTO STRICT v_balance FROM accounts WHERE id = p_id;
+      RETURN v_balance;
+    END;
+    $$ LANGUAGE plpgsql
+  expected: >-
+    CREATE OR REPLACE FUNCTION get_balance(p_id NUMBER)
+    RETURN NUMBER IS
+    v_balance NUMBER;
+    BEGIN
+      SELECT balance INTO v_balance FROM accounts WHERE id = p_id;
+      RETURN v_balance;
+    END;
+  complexity: 4
+  constructs: ["SELECT_INTO_STRICT"]
+  tags: ["p2o", "plsql", "select_into"]
+  acceptance_criteria:
+    - "PG STRICT keyword raises NO_DATA_FOUND / TOO_MANY_ROWS"
+    - "Oracle SELECT INTO natively raises these exceptions"
+    - "Simply remove STRICT keyword for Oracle equivalent"
+
+# ---------------------------------------------------------------------------
+# RETURNS TABLE / RETURNS SETOF → LLM forwarding (from PDF validation 2026-03-28)
+# ---------------------------------------------------------------------------
+
+- name: returns_table_to_llm_forward
+  category: p2o_plsql
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION get_employees_by_dept(p_dept INTEGER)
+    RETURNS TABLE(id INTEGER, name TEXT) AS $$
+    BEGIN
+      RETURN QUERY SELECT e.id, e.name FROM employees e WHERE e.dept_id = p_dept;
+    END;
+    $$ LANGUAGE plpgsql
+  expected: >-
+    /* LLM_FORWARD: RETURNS TABLE requires conversion to Oracle pipelined function or SYS_REFCURSOR. */
+  complexity: 8
+  constructs: ["RETURNS_TABLE", "RETURN_QUERY"]
+  tags: ["p2o", "plsql", "function", "llm_forward"]
+  acceptance_criteria:
+    - "PG RETURNS TABLE has no direct PL/SQL equivalent"
+    - "Oracle options: pipelined function with object type, or SYS_REFCURSOR out param"
+    - "Too complex for deterministic rule; forward to LLM Transpiler"
+
+- name: returns_setof_to_llm_forward
+  category: p2o_plsql
+  direction: pg_to_oracle
+  source: >-
+    CREATE OR REPLACE FUNCTION get_active_users()
+    RETURNS SETOF users AS $$
+    BEGIN
+      RETURN QUERY SELECT * FROM users WHERE active = true;
+    END;
+    $$ LANGUAGE plpgsql
+  expected: >-
+    /* LLM_FORWARD: RETURNS SETOF requires conversion to Oracle pipelined function or SYS_REFCURSOR. */
+  complexity: 8
+  constructs: ["RETURNS_SETOF"]
+  tags: ["p2o", "plsql", "function", "llm_forward"]
+  acceptance_criteria:
+    - "PG RETURNS SETOF returns multiple rows as a set"
+    - "Oracle requires pipelined function or SYS_REFCURSOR"

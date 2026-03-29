@@ -1,0 +1,58 @@
+{
+  "app_name": "SteinDB",
+  "tagline": "유일한 양방향 Oracle ↔ PostgreSQL 마이그레이션 도구",
+  "directions": {
+    "o2p": "Oracle에서 PostgreSQL로",
+    "p2o": "PostgreSQL에서 Oracle로"
+  },
+  "tiers": {
+    "free": "무료",
+    "registered": "등록됨",
+    "solo": "솔로",
+    "team": "팀",
+    "enterprise": "엔터프라이즈"
+  },
+  "roles": {
+    "owner": "소유자",
+    "admin": "관리자",
+    "member": "멤버",
+    "viewer": "조회자"
+  },
+  "actions": {
+    "save": "저장",
+    "cancel": "취소",
+    "delete": "삭제",
+    "edit": "편집",
+    "create": "생성",
+    "search": "검색",
+    "filter": "필터",
+    "export": "내보내기",
+    "download": "다운로드",
+    "copy": "복사",
+    "copied": "복사되었습니다!",
+    "loading": "로딩 중...",
+    "submit": "제출",
+    "confirm": "확인",
+    "back": "뒤로",
+    "next": "다음",
+    "upgrade": "업그레이드",
+    "register": "등록",
+    "login": "로그인",
+    "logout": "로그아웃"
+  },
+  "status": {
+    "active": "활성",
+    "inactive": "비활성",
+    "success": "성공",
+    "failed": "실패",
+    "partial": "부분 완료",
+    "pending": "대기 중"
+  },
+  "time": {
+    "just_now": "방금 전",
+    "minutes_ago": "{n}분 전",
+    "hours_ago": "{n}시간 전",
+    "days_ago": "{n}일 전",
+    "yesterday": "어제"
+  }
+}

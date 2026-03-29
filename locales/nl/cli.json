@@ -1,0 +1,53 @@
+{
+  "commands": {
+    "scan": {
+      "help": "Oracle/PostgreSQL-schema scannen en migratiegereedheidsrapport genereren",
+      "scanning": "{file} wordt gescand...",
+      "found_objects": "{count} objecten gevonden",
+      "complexity": "Complexiteit: {score}/10",
+      "complete": "Scan voltooid in {seconds}s"
+    },
+    "convert": {
+      "help": "Oracle SQL/PL-SQL converteren naar PostgreSQL (of omgekeerd)",
+      "converting": "{count} objecten worden geconverteerd...",
+      "rules_only": "Alleen-regels-modus wordt gebruikt (90% dekking)",
+      "ai_required": "AI-ondersteunde conversie vereist registratie (gratis).\nRegistreren: stein auth register --email you@company.com\nOf gebruik alleen-regels-modus: stein convert myfile.sql",
+      "complete": "{converted}/{total} objecten geconverteerd",
+      "forwarded": "{count} objecten doorgestuurd naar AI"
+    },
+    "verify": {
+      "help": "Geconverteerde PostgreSQL/Oracle-uitvoer controleren op juistheid",
+      "verifying": "{count} bestanden worden geverifieerd...",
+      "green": "GROEN — hoog vertrouwen",
+      "yellow": "GEEL — beoordeling aanbevolen",
+      "red": "ROOD — handmatige correctie nodig"
+    },
+    "auth": {
+      "register_help": "Gratis SteinDB-account registreren",
+      "register_success": "Registratie geslaagd!",
+      "register_prompt": "E-mailadres",
+      "login_help": "Inloggen met een bestaand token",
+      "logout_help": "Opgeslagen token verwijderen",
+      "logout_success": "Uitgelogd. Alleen-regels-modus werkt nog steeds zonder token.",
+      "status_help": "Huidige authenticatiestatus weergeven",
+      "status_authenticated": "Geauthenticeerd",
+      "status_not_authenticated": "Niet geauthenticeerd",
+      "upgrade_help": "Uw account upgraden naar een betaald abonnement"
+    }
+  },
+  "errors": {
+    "file_not_found": "Bestand niet gevonden: {path}",
+    "invalid_sql": "Ongeldige SQL-invoer",
+    "connection_failed": "Verbinding mislukt: {error}",
+    "no_objects": "Geen objecten gevonden in invoer"
+  },
+  "report": {
+    "title": "SteinDB-migratierapport",
+    "summary": "Samenvatting",
+    "total_objects": "Totaal Objecten",
+    "auto_convertible": "Automatisch converteerbaar",
+    "needs_ai": "AI-ondersteuning nodig",
+    "complexity_avg": "Gemiddelde Complexiteit",
+    "savings_estimate": "Geschatte Besparing"
+  }
+}

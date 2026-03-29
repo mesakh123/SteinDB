@@ -1,0 +1,172 @@
+# =============================================================================
+# SteinDB Golden Tests — Data Type Edge Cases
+# Mixed types, constraints, defaults, and complex scenarios
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# MIXED TYPES IN SINGLE CREATE TABLE
+# ---------------------------------------------------------------------------
+
+- name: mixed_types_comprehensive
+  category: data_types
+  oracle: >-
+    CREATE TABLE orders (
+      id NUMBER(9),
+      customer_name VARCHAR2(200),
+      order_date DATE,
+      total_amount NUMBER(12,2),
+      notes CLOB,
+      status NUMBER(2)
+    )
+  expected_postgresql: >-
+    CREATE TABLE orders (
+      id INTEGER,
+      customer_name VARCHAR(200),
+      order_date TIMESTAMP(0),
+      total_amount NUMERIC(12,2),
+      notes TEXT,
+      status SMALLINT
+    )
+  constructs: ["NUMBER", "VARCHAR2", "DATE", "CLOB"]
+  tags: ["mixed_types"]
+  complexity: 3
+
+- name: mixed_binary_and_temporal
+  category: data_types
+  oracle: >-
+    CREATE TABLE documents (
+      doc_id NUMBER(9),
+      content BLOB,
+      metadata XMLTYPE,
+      created_at TIMESTAMP WITH TIME ZONE,
+      duration INTERVAL DAY TO SECOND
+    )
+  expected_postgresql: >-
+    CREATE TABLE documents (
+      doc_id INTEGER,
+      content BYTEA,
+      metadata XML,
+      created_at TIMESTAMPTZ,
+      duration INTERVAL
+    )
+  constructs: ["NUMBER", "BLOB", "XMLTYPE", "TIMESTAMP WITH TIME ZONE", "INTERVAL DAY TO SECOND"]
+  tags: ["mixed_types"]
+  complexity: 3
+
+# ---------------------------------------------------------------------------
+# DEFAULT VALUES PRESERVED
+# ---------------------------------------------------------------------------
+
+- name: varchar2_with_default
+  category: data_types
+  oracle: "CREATE TABLE t (status VARCHAR2(20) DEFAULT 'ACTIVE')"
+  expected_postgresql: "CREATE TABLE t (status VARCHAR(20) DEFAULT 'ACTIVE')"
+  constructs: ["VARCHAR2"]
+  tags: ["default_value"]
+
+- name: number_with_default
+  category: data_types
+  oracle: "CREATE TABLE t (retry_count NUMBER(4) DEFAULT 0)"
+  expected_postgresql: "CREATE TABLE t (retry_count SMALLINT DEFAULT 0)"
+  constructs: ["NUMBER"]
+  tags: ["default_value", "integer_optimization"]
+
+- name: date_with_sysdate_default
+  category: data_types
+  oracle: "CREATE TABLE t (created DATE DEFAULT SYSDATE)"
+  expected_postgresql: "CREATE TABLE t (created TIMESTAMP(0) DEFAULT CURRENT_TIMESTAMP)"
+  constructs: ["DATE", "SYSDATE"]
+  tags: ["default_value", "temporal"]
+  complexity: 2
+
+# ---------------------------------------------------------------------------
+# NOT NULL CONSTRAINTS PRESERVED
+# ---------------------------------------------------------------------------
+
+- name: not_null_preserved_varchar2
+  category: data_types
+  oracle: "CREATE TABLE t (name VARCHAR2(100) NOT NULL)"
+  expected_postgresql: "CREATE TABLE t (name VARCHAR(100) NOT NULL)"
+  constructs: ["VARCHAR2"]
+  tags: ["constraints"]
+
+- name: not_null_preserved_number
+  category: data_types
+  oracle: "CREATE TABLE t (id NUMBER(9) NOT NULL, balance NUMBER(15,2) NOT NULL)"
+  expected_postgresql: "CREATE TABLE t (id INTEGER NOT NULL, balance NUMERIC(15,2) NOT NULL)"
+  constructs: ["NUMBER"]
+  tags: ["constraints", "integer_optimization"]
+
+- name: not_null_with_default
+  category: data_types
+  oracle: "CREATE TABLE t (is_active NUMBER(1,0) DEFAULT 1 NOT NULL)"
+  expected_postgresql: "CREATE TABLE t (is_active BOOLEAN DEFAULT TRUE NOT NULL)"
+  constructs: ["NUMBER"]
+  tags: ["constraints", "default_value", "boolean_optimization"]
+  complexity: 3
+
+# ---------------------------------------------------------------------------
+# CITEXT CONSIDERATION
+# ---------------------------------------------------------------------------
+
+- name: varchar2_citext_consideration
+  category: data_types
+  oracle: "CREATE TABLE t (email VARCHAR2(255))"
+  expected_postgresql: "CREATE TABLE t (email VARCHAR(255))"
+  constructs: ["VARCHAR2"]
+  tags: ["string", "citext_candidate"]
+  complexity: 2
+  acceptance_criteria:
+    - "Consider citext extension for case-insensitive columns like email"
+    - "Default mapping is VARCHAR; citext requires explicit opt-in"
+
+# ---------------------------------------------------------------------------
+# ORACLE COLLECTIONS / NESTED TABLES (LLM-required)
+# ---------------------------------------------------------------------------
+
+- name: nested_table_type
+  category: data_types
+  oracle: >-
+    CREATE TYPE phone_list AS TABLE OF VARCHAR2(20)
+  expected_postgresql: "CREATE DOMAIN phone_list AS VARCHAR(20)[]"
+  constructs: ["CREATE TYPE", "TABLE OF"]
+  tags: ["collection", "llm_required"]
+  complexity: 8
+  acceptance_criteria:
+    - "Oracle nested table types require LLM for correct PostgreSQL mapping"
+    - "TABLE OF scalar_type maps to PostgreSQL array type (scalar_type[])"
+    - "Use CREATE DOMAIN to preserve the named type"
+
+- name: varray_type
+  category: data_types
+  oracle: >-
+    CREATE TYPE color_array AS VARRAY(10) OF VARCHAR2(30)
+  expected_postgresql: "CREATE DOMAIN color_array AS VARCHAR(30)[]"
+  constructs: ["CREATE TYPE", "VARRAY"]
+  tags: ["collection", "llm_required"]
+  complexity: 8
+  acceptance_criteria:
+    - "Oracle VARRAY maps to PostgreSQL array type"
+    - "Size limit (10) is lost in PostgreSQL arrays; add CHECK constraint if needed"
+
+# ---------------------------------------------------------------------------
+# COMPOSITE / RECORD TYPES
+# ---------------------------------------------------------------------------
+
+- name: object_type_to_composite
+  category: data_types
+  oracle: >-
+    CREATE TYPE address_t AS OBJECT (
+      street VARCHAR2(200),
+      city VARCHAR2(100),
+      zip_code NUMBER(5)
+    )
+  expected_postgresql: >-
+    CREATE TYPE address_t AS (
+      street VARCHAR(200),
+      city VARCHAR(100),
+      zip_code INTEGER
+    )
+  constructs: ["CREATE TYPE", "OBJECT"]
+  tags: ["composite_type", "llm_required"]
+  complexity: 5

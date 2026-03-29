@@ -1,0 +1,231 @@
+# =============================================================================
+# SteinDB Golden Tests — Miscellaneous Oracle-Specific Patterns
+# DUAL, ROWID, hints, MINUS, empty string, pseudo-columns, SYS_CONTEXT, etc.
+# =============================================================================
+
+- name: select_from_dual
+  category: misc
+  oracle: "SELECT SYSDATE FROM DUAL"
+  expected_postgresql: "SELECT CURRENT_TIMESTAMP"
+  constructs: ["DUAL", "SYSDATE"]
+
+- name: select_expression_from_dual
+  category: misc
+  oracle: "SELECT 1 + 1 FROM DUAL"
+  expected_postgresql: "SELECT 1 + 1"
+  constructs: ["DUAL"]
+
+- name: rowid_reference
+  category: misc
+  oracle: "SELECT ROWID, name FROM employees WHERE ROWNUM <= 5"
+  expected_postgresql: "SELECT ctid, name FROM employees LIMIT 5"
+  constructs: ["ROWID", "ROWNUM"]
+  tags: ["manual_review"]
+  acceptance_criteria:
+    - "ctid is not a stable row identifier; prefer adding a surrogate key column"
+    - "ROWID usage in application logic should be reviewed"
+
+- name: rowid_delete_duplicates
+  category: misc
+  oracle: |
+    DELETE FROM employees
+    WHERE ROWID NOT IN (
+      SELECT MIN(ROWID) FROM employees GROUP BY name, department_id
+    )
+  expected_postgresql: |
+    DELETE FROM employees
+    WHERE ctid NOT IN (
+      SELECT MIN(ctid) FROM employees GROUP BY name, department_id
+    )
+  complexity: 4
+  constructs: ["ROWID"]
+  tags: ["manual_review"]
+  acceptance_criteria:
+    - "ctid-based dedup works but is fragile; consider DISTINCT ON or window functions"
+
+- name: oracle_hint_index
+  category: misc
+  oracle: "SELECT /*+ INDEX(e idx_emp_name) */ name FROM employees e WHERE name = 'John'"
+  expected_postgresql: "SELECT name FROM employees e WHERE name = 'John'"
+  constructs: ["HINT"]
+  tags: ["hint_removal"]
+  acceptance_criteria:
+    - "Oracle hints removed; use pg_hint_plan extension if needed"
+
+- name: oracle_hint_full
+  category: misc
+  oracle: "SELECT /*+ FULL(employees) */ * FROM employees"
+  expected_postgresql: "SELECT * FROM employees"
+  constructs: ["HINT"]
+  tags: ["hint_removal"]
+
+- name: oracle_hint_parallel
+  category: misc
+  oracle: "SELECT /*+ PARALLEL(e, 4) */ * FROM employees e"
+  expected_postgresql: "SELECT * FROM employees e"
+  constructs: ["HINT"]
+  tags: ["hint_removal"]
+
+- name: minus_to_except
+  category: misc
+  oracle: "SELECT id FROM employees MINUS SELECT id FROM contractors"
+  expected_postgresql: "SELECT id FROM employees EXCEPT SELECT id FROM contractors"
+  constructs: ["MINUS"]
+
+- name: empty_string_null_awareness
+  category: misc
+  oracle: "SELECT * FROM employees WHERE name = ''"
+  expected_postgresql: "SELECT * FROM employees WHERE name IS NULL OR name = ''"
+  constructs: ["EMPTY_STRING"]
+  tags: ["manual_review"]
+  acceptance_criteria:
+    - "Oracle treats '' as NULL; PostgreSQL distinguishes them"
+    - "Review application logic for empty string vs NULL semantics"
+
+- name: sysdate_arithmetic
+  category: misc
+  oracle: "SELECT SYSDATE + 1 FROM DUAL"
+  expected_postgresql: "SELECT CURRENT_TIMESTAMP + INTERVAL '1 day'"
+  constructs: ["SYSDATE", "DATE_ARITHMETIC", "DUAL"]
+
+- name: sysdate_arithmetic_subtract
+  category: misc
+  oracle: "SELECT SYSDATE - 7 FROM DUAL"
+  expected_postgresql: "SELECT CURRENT_TIMESTAMP - INTERVAL '7 days'"
+  constructs: ["SYSDATE", "DATE_ARITHMETIC", "DUAL"]
+
+- name: to_char_sysdate
+  category: misc
+  oracle: "SELECT TO_CHAR(SYSDATE, 'YYYYMMDD') FROM DUAL"
+  expected_postgresql: "SELECT TO_CHAR(CURRENT_TIMESTAMP, 'YYYYMMDD')"
+  constructs: ["TO_CHAR", "SYSDATE", "DUAL"]
+
+- name: user_pseudo_column
+  category: misc
+  oracle: "SELECT USER FROM DUAL"
+  expected_postgresql: "SELECT CURRENT_USER"
+  constructs: ["USER", "DUAL"]
+
+- name: uid_pseudo_column
+  category: misc
+  oracle: "INSERT INTO audit_log (user_id, action) VALUES (UID, 'LOGIN')"
+  expected_postgresql: |
+    -- WARNING: Oracle UID (numeric user ID) has no direct PostgreSQL equivalent.
+    -- Use CURRENT_USER (text) or create a mapping table.
+    INSERT INTO audit_log (user_id, action) VALUES (CURRENT_USER, 'LOGIN')
+  constructs: ["UID"]
+  tags: ["manual_review"]
+
+- name: sys_context_userenv
+  category: misc
+  oracle: "SELECT SYS_CONTEXT('USERENV', 'SESSION_USER') FROM DUAL"
+  expected_postgresql: "SELECT current_setting('session_authorization')"
+  constructs: ["SYS_CONTEXT"]
+
+- name: sys_context_ip_address
+  category: misc
+  oracle: "SELECT SYS_CONTEXT('USERENV', 'IP_ADDRESS') FROM DUAL"
+  expected_postgresql: "SELECT inet_client_addr()"
+  constructs: ["SYS_CONTEXT"]
+
+- name: sys_context_db_name
+  category: misc
+  oracle: "SELECT SYS_CONTEXT('USERENV', 'DB_NAME') FROM DUAL"
+  expected_postgresql: "SELECT current_database()"
+  constructs: ["SYS_CONTEXT", "DUAL"]
+
+- name: create_or_replace_force_view
+  category: misc
+  oracle: "CREATE OR REPLACE FORCE VIEW emp_view AS SELECT id, name FROM employees"
+  expected_postgresql: "CREATE OR REPLACE VIEW emp_view AS SELECT id, name FROM employees"
+  constructs: ["FORCE VIEW"]
+  acceptance_criteria:
+    - "FORCE keyword removed; PostgreSQL CREATE VIEW fails if base table missing"
+
+- name: purge_recyclebin
+  category: misc
+  oracle: "PURGE RECYCLEBIN"
+  expected_postgresql: "-- PURGE RECYCLEBIN: no PostgreSQL equivalent needed (no recycle bin)"
+  constructs: ["PURGE"]
+  tags: ["no_equivalent"]
+
+- name: systimestamp
+  category: misc
+  oracle: "SELECT SYSTIMESTAMP FROM DUAL"
+  expected_postgresql: "SELECT CURRENT_TIMESTAMP"
+  constructs: ["SYSTIMESTAMP", "DUAL"]
+
+- name: connect_by_level
+  category: misc
+  oracle: "SELECT LEVEL FROM DUAL CONNECT BY LEVEL <= 10"
+  expected_postgresql: "SELECT generate_series(1, 10) AS level"
+  complexity: 3
+  constructs: ["CONNECT BY", "LEVEL", "DUAL"]
+
+- name: hierarchical_query
+  category: misc
+  oracle: |
+    SELECT employee_id, manager_id, LEVEL
+    FROM employees
+    START WITH manager_id IS NULL
+    CONNECT BY PRIOR employee_id = manager_id
+  expected_postgresql: |
+    WITH RECURSIVE emp_hierarchy AS (
+      SELECT employee_id, manager_id, 1 AS level
+      FROM employees
+      WHERE manager_id IS NULL
+      UNION ALL
+      SELECT e.employee_id, e.manager_id, h.level + 1
+      FROM employees e
+      JOIN emp_hierarchy h ON e.manager_id = h.employee_id
+    )
+    SELECT employee_id, manager_id, level FROM emp_hierarchy
+  complexity: 7
+  constructs: ["CONNECT BY", "START WITH", "PRIOR", "LEVEL"]
+
+- name: rownum_in_subquery
+  category: misc
+  oracle: "SELECT * FROM (SELECT e.*, ROWNUM rn FROM employees e) WHERE rn BETWEEN 11 AND 20"
+  expected_postgresql: "SELECT * FROM employees LIMIT 10 OFFSET 10"
+  complexity: 3
+  constructs: ["ROWNUM"]
+
+- name: sequence_nextval_from_dual
+  category: misc
+  oracle: "SELECT my_seq.NEXTVAL FROM DUAL"
+  expected_postgresql: "SELECT nextval('my_seq')"
+  constructs: ["NEXTVAL", "DUAL"]
+
+- name: listagg_function
+  category: misc
+  oracle: "SELECT department_id, LISTAGG(name, ', ') WITHIN GROUP (ORDER BY name) FROM employees GROUP BY department_id"
+  expected_postgresql: "SELECT department_id, STRING_AGG(name, ', ' ORDER BY name) FROM employees GROUP BY department_id"
+  constructs: ["LISTAGG"]
+
+- name: outer_join_oracle_syntax
+  category: misc
+  oracle: "SELECT e.name, d.dept_name FROM employees e, departments d WHERE e.dept_id = d.id(+)"
+  expected_postgresql: "SELECT e.name, d.dept_name FROM employees e LEFT JOIN departments d ON e.dept_id = d.id"
+  complexity: 3
+  constructs: ["OUTER_JOIN_ORACLE"]
+
+- name: wm_concat
+  category: misc
+  oracle: "SELECT department_id, WM_CONCAT(name) FROM employees GROUP BY department_id"
+  expected_postgresql: "SELECT department_id, STRING_AGG(name, ',') FROM employees GROUP BY department_id"
+  constructs: ["WM_CONCAT"]
+
+- name: dbms_output_put_line
+  category: misc
+  oracle: "DBMS_OUTPUT.PUT_LINE('Hello World')"
+  expected_postgresql: "RAISE NOTICE 'Hello World'"
+  constructs: ["DBMS_OUTPUT"]
+
+- name: date_diff_days
+  category: misc
+  oracle: "SELECT end_date - start_date FROM tasks"
+  expected_postgresql: "SELECT EXTRACT(EPOCH FROM (end_date - start_date)) / 86400 FROM tasks"
+  constructs: ["DATE_ARITHMETIC"]
+  tags: ["manual_review"]
+  acceptance_criteria:
+    - "Oracle date subtraction returns numeric days; PostgreSQL returns interval"

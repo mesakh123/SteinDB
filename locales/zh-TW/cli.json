@@ -1,0 +1,53 @@
+{
+  "commands": {
+    "scan": {
+      "help": "掃描Oracle/PostgreSQL架構並產生遷移準備報告",
+      "scanning": "正在掃描 {file}...",
+      "found_objects": "發現 {count} 個物件",
+      "complexity": "複雜度: {score}/10",
+      "complete": "掃描完成（{seconds}秒）"
+    },
+    "convert": {
+      "help": "將Oracle SQL/PL-SQL轉換為PostgreSQL（支援反向轉換）",
+      "converting": "正在轉換 {count} 個物件...",
+      "rules_only": "使用純規則模式（90%覆蓋率）",
+      "ai_required": "AI輔助轉換需要註冊（免費）。\n註冊: stein auth register --email you@company.com\n或使用純規則模式: stein convert myfile.sql",
+      "complete": "已轉換 {converted}/{total} 個物件",
+      "forwarded": "{count} 個物件已轉交AI處理"
+    },
+    "verify": {
+      "help": "驗證轉換後的PostgreSQL/Oracle輸出的正確性",
+      "verifying": "正在驗證 {count} 個檔案...",
+      "green": "綠色 — 高信賴度",
+      "yellow": "黃色 — 建議審查",
+      "red": "紅色 — 需要手動修正"
+    },
+    "auth": {
+      "register_help": "註冊免費的SteinDB帳戶",
+      "register_success": "註冊成功！",
+      "register_prompt": "電子郵件地址",
+      "login_help": "使用已有權杖登入",
+      "logout_help": "移除已儲存的權杖",
+      "logout_success": "已登出。無權杖時仍可使用純規則模式。",
+      "status_help": "顯示目前認證狀態",
+      "status_authenticated": "已認證",
+      "status_not_authenticated": "未認證",
+      "upgrade_help": "將帳戶升級為付費方案"
+    }
+  },
+  "errors": {
+    "file_not_found": "檔案未找到: {path}",
+    "invalid_sql": "無效的SQL輸入",
+    "connection_failed": "連線失敗: {error}",
+    "no_objects": "輸入中未發現物件"
+  },
+  "report": {
+    "title": "SteinDB遷移報告",
+    "summary": "摘要",
+    "total_objects": "物件總數",
+    "auto_convertible": "可自動轉換",
+    "needs_ai": "需要AI輔助",
+    "complexity_avg": "平均複雜度",
+    "savings_estimate": "預估節省成本"
+  }
+}

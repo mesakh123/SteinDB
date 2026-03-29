@@ -1,0 +1,119 @@
+# Golden tests: Oracle SYSDATE/SYSTIMESTAMP nuances vs PostgreSQL timestamp behavior
+# CRITICAL: Oracle SYSDATE = wall clock; PG CURRENT_TIMESTAMP = transaction start time
+
+- name: sysdate_vs_current_timestamp
+  category: functions
+  oracle: "SELECT SYSDATE FROM DUAL"
+  expected_postgresql: "SELECT CURRENT_TIMESTAMP"
+  complexity: 2
+  constructs: ["SYSDATE", "DUAL"]
+  tags: ["timestamp_nuances"]
+  acceptance_criteria:
+    - "CURRENT_TIMESTAMP returns transaction start time, NOT wall clock"
+    - "In long transactions, CURRENT_TIMESTAMP stays the same"
+    - "Use clock_timestamp() if actual wall clock time is needed"
+
+- name: systimestamp_to_clock_timestamp
+  category: functions
+  oracle: "SELECT SYSTIMESTAMP FROM DUAL"
+  expected_postgresql: "SELECT clock_timestamp()"
+  complexity: 2
+  constructs: ["SYSTIMESTAMP", "DUAL"]
+  tags: ["timestamp_nuances"]
+  acceptance_criteria:
+    - "SYSTIMESTAMP includes fractional seconds and timezone"
+    - "clock_timestamp() is the closest PG equivalent (wall clock)"
+
+- name: sysdate_in_long_transaction
+  category: functions
+  oracle: |
+    CREATE OR REPLACE PROCEDURE long_running_job IS
+      v_start DATE;
+      v_end DATE;
+    BEGIN
+      v_start := SYSDATE;
+      -- ... long processing ...
+      DBMS_LOCK.SLEEP(60);
+      v_end := SYSDATE;
+      -- v_end - v_start will be ~60 seconds in Oracle
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE long_running_job()
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_start TIMESTAMP;
+      v_end TIMESTAMP;
+    BEGIN
+      v_start := clock_timestamp();
+      -- ... long processing ...
+      PERFORM pg_sleep(60);
+      v_end := clock_timestamp();
+      -- WARNING: Using CURRENT_TIMESTAMP here would give the SAME value
+      -- for both v_start and v_end (transaction start time).
+      -- clock_timestamp() gives actual wall clock time.
+    END;
+    $$;
+  complexity: 5
+  constructs: ["SYSDATE", "DBMS_LOCK.SLEEP"]
+  tags: ["timestamp_nuances", "critical_behavioral_difference"]
+  acceptance_criteria:
+    - "SYSDATE changes during a transaction in Oracle"
+    - "CURRENT_TIMESTAMP does NOT change during a transaction in PG"
+    - "clock_timestamp() must be used for elapsed time measurement"
+
+- name: timestamp_with_timezone_storage
+  category: functions
+  oracle: |
+    CREATE TABLE event_log (
+      id NUMBER,
+      event_time TIMESTAMP WITH TIME ZONE,
+      event_name VARCHAR2(100)
+    );
+    INSERT INTO event_log VALUES (1, TIMESTAMP '2024-06-15 10:30:00 US/Eastern', 'login');
+  expected_postgresql: |
+    CREATE TABLE event_log (
+      id INTEGER,
+      event_time TIMESTAMP WITH TIME ZONE,
+      event_name VARCHAR(100)
+    );
+    INSERT INTO event_log VALUES (1, TIMESTAMP WITH TIME ZONE '2024-06-15 10:30:00 US/Eastern', 'login');
+    -- WARNING: PG converts to UTC on storage. Original timezone info is LOST.
+    -- Oracle preserves the original timezone. Querying back will show server timezone.
+  complexity: 4
+  constructs: ["TIMESTAMP WITH TIME ZONE"]
+  tags: ["timestamp_nuances", "data_loss_warning"]
+  acceptance_criteria:
+    - "Oracle stores the original timezone with the timestamp"
+    - "PG converts to UTC on storage and displays in session timezone"
+    - "Original timezone information is lost in PG"
+
+- name: interval_arithmetic_differences
+  category: functions
+  oracle: "SELECT hire_date + 1, hire_date + 1/24, hire_date + 30.5 FROM employees"
+  expected_postgresql: "SELECT hire_date + INTERVAL '1 day', hire_date + INTERVAL '1 hour', hire_date + INTERVAL '30 days 12 hours' FROM employees"
+  complexity: 4
+  constructs: ["DATE_ARITHMETIC", "INTERVAL"]
+  tags: ["timestamp_nuances"]
+  acceptance_criteria:
+    - "Oracle DATE + number adds days (fractional = hours/minutes)"
+    - "PG requires explicit INTERVAL expressions"
+    - "Oracle DATE + 1/24 = 1 hour; PG needs INTERVAL '1 hour'"
+
+- name: extract_from_timestamp
+  category: functions
+  oracle: >
+    SELECT EXTRACT(YEAR FROM hire_date),
+           EXTRACT(MONTH FROM hire_date),
+           TO_NUMBER(TO_CHAR(hire_date, 'HH24')) AS hour_val
+    FROM employees
+  expected_postgresql: >
+    SELECT EXTRACT(YEAR FROM hire_date),
+           EXTRACT(MONTH FROM hire_date),
+           EXTRACT(HOUR FROM hire_date) AS hour_val
+    FROM employees
+  complexity: 3
+  constructs: ["EXTRACT", "TO_CHAR", "TO_NUMBER"]
+  tags: ["timestamp_nuances"]
+  acceptance_criteria:
+    - "EXTRACT(YEAR/MONTH) works the same in both"
+    - "Oracle often uses TO_CHAR+TO_NUMBER for hour; PG supports EXTRACT(HOUR)"

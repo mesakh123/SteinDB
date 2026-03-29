@@ -1,0 +1,127 @@
+# =============================================================================
+# SteinDB Golden Tests — P2O Special Data Type Conversions
+# PostgreSQL-specific types → Oracle equivalents (many lossy)
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# JSON TYPES
+# ---------------------------------------------------------------------------
+
+- name: jsonb_to_clob
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (metadata JSONB)"
+  expected: "CREATE TABLE t (metadata CLOB CHECK (metadata IS JSON))"
+  constructs: ["JSONB"]
+  tags: ["special", "json", "lossy", "p2o"]
+  acceptance_criteria:
+    - "JSONB maps to CLOB with IS JSON check constraint"
+    - "Loses native JSONB indexing and operator support"
+
+- name: json_to_clob
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (config JSON)"
+  expected: "CREATE TABLE t (config CLOB CHECK (config IS JSON))"
+  constructs: ["JSON"]
+  tags: ["special", "json", "lossy", "p2o"]
+  acceptance_criteria:
+    - "PG JSON (non-binary) also maps to CLOB with IS JSON check"
+
+# ---------------------------------------------------------------------------
+# UUID / XML / BINARY
+# ---------------------------------------------------------------------------
+
+- name: uuid_to_raw16
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (id UUID DEFAULT gen_random_uuid())"
+  expected: "CREATE TABLE t (id RAW(16) DEFAULT SYS_GUID())"
+  constructs: ["UUID"]
+  tags: ["special", "uuid", "p2o"]
+
+- name: xml_to_xmltype
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (doc XML)"
+  expected: "CREATE TABLE t (doc XMLTYPE)"
+  constructs: ["XML"]
+  tags: ["special", "xml", "p2o"]
+
+- name: bytea_to_blob
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (content BYTEA)"
+  expected: "CREATE TABLE t (content BLOB)"
+  constructs: ["BYTEA"]
+  tags: ["special", "binary", "p2o"]
+
+# ---------------------------------------------------------------------------
+# ARRAY TYPES (lossy)
+# ---------------------------------------------------------------------------
+
+- name: text_array_to_nested_table
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (id INTEGER, tags TEXT[])"
+  expected: >-
+    CREATE TABLE t (
+      id NUMBER(10),
+      tags SYS.ODCIVARCHAR2LIST
+    )
+  constructs: ["TEXT", "ARRAY"]
+  tags: ["special", "array", "lossy", "p2o"]
+  acceptance_criteria:
+    - "PG arrays have no direct Oracle column equivalent"
+    - "SYS.ODCIVARCHAR2LIST is a built-in Oracle collection type"
+
+- name: integer_array_to_nested_table
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (id INTEGER, values INTEGER[])"
+  expected: >-
+    CREATE TABLE t (
+      id NUMBER(10),
+      values SYS.ODCINUMBERLIST
+    )
+  constructs: ["INTEGER", "ARRAY"]
+  tags: ["special", "array", "lossy", "p2o"]
+
+# ---------------------------------------------------------------------------
+# OTHER PG-SPECIFIC TYPES (lossy)
+# ---------------------------------------------------------------------------
+
+- name: hstore_to_clob
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (id INTEGER, properties HSTORE)"
+  expected: "CREATE TABLE t (id NUMBER(10), properties CLOB CHECK (properties IS JSON))"
+  constructs: ["HSTORE"]
+  tags: ["special", "lossy", "p2o"]
+  acceptance_criteria:
+    - "PG HSTORE maps to CLOB with JSON check"
+    - "Loses native key-value operators like -> and ?"
+
+- name: citext_to_varchar2
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (email CITEXT)"
+  expected: "CREATE TABLE t (email VARCHAR2(4000))"
+  constructs: ["CITEXT"]
+  tags: ["special", "lossy", "p2o"]
+  acceptance_criteria:
+    - "PG CITEXT provides case-insensitive comparison"
+    - "Oracle VARCHAR2 is case-sensitive by default"
+    - "Must add NLS settings or function-based index for case-insensitive behavior"
+
+- name: point_to_sdo_geometry
+  category: p2o_data_types
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (id INTEGER, location POINT)"
+  expected: "CREATE TABLE t (id NUMBER(10), location SDO_GEOMETRY)"
+  constructs: ["POINT"]
+  tags: ["special", "spatial", "lossy", "p2o"]
+  acceptance_criteria:
+    - "PG geometric types map to Oracle SDO_GEOMETRY"
+    - "PostGIS extension types also map to SDO_GEOMETRY"
+    - "Spatial function APIs are completely different"

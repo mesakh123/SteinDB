@@ -1,0 +1,79 @@
+# Golden tests: Oracle date functions → PostgreSQL equivalents
+
+- name: sysdate_to_current_timestamp
+  category: functions
+  oracle: "SELECT SYSDATE FROM DUAL"
+  expected_postgresql: "SELECT CURRENT_TIMESTAMP"
+  constructs: ["SYSDATE", "DUAL"]
+
+- name: systimestamp_to_clock_timestamp
+  category: functions
+  oracle: "SELECT SYSTIMESTAMP FROM DUAL"
+  expected_postgresql: "SELECT clock_timestamp()"
+  constructs: ["SYSTIMESTAMP", "DUAL"]
+
+- name: add_months_to_interval
+  category: functions
+  oracle: "SELECT ADD_MONTHS(hire_date, 6) FROM employees"
+  expected_postgresql: "SELECT hire_date + INTERVAL '6 months' FROM employees"
+  constructs: ["ADD_MONTHS"]
+
+- name: months_between_to_age
+  category: functions
+  oracle: "SELECT MONTHS_BETWEEN(SYSDATE, hire_date) FROM employees"
+  expected_postgresql: "SELECT EXTRACT(YEAR FROM AGE(CURRENT_TIMESTAMP, hire_date)) * 12 + EXTRACT(MONTH FROM AGE(CURRENT_TIMESTAMP, hire_date)) FROM employees"
+  constructs: ["MONTHS_BETWEEN", "SYSDATE"]
+  complexity: 3
+
+- name: last_day_function
+  category: functions
+  oracle: "SELECT LAST_DAY(hire_date) FROM employees"
+  expected_postgresql: "SELECT (DATE_TRUNC('month', hire_date) + INTERVAL '1 month - 1 day')::DATE FROM employees"
+  constructs: ["LAST_DAY"]
+
+- name: next_day_function
+  category: functions
+  oracle: "SELECT NEXT_DAY(hire_date, 'MONDAY') FROM employees"
+  expected_postgresql: "SELECT (hire_date + (7 + 1 - EXTRACT(DOW FROM hire_date)::INTEGER) % 7 * INTERVAL '1 day')::DATE FROM employees"
+  constructs: ["NEXT_DAY"]
+  complexity: 3
+  tags: ["orafce_alternative"]
+
+- name: trunc_date_day
+  category: functions
+  oracle: "SELECT TRUNC(hire_date) FROM employees"
+  expected_postgresql: "SELECT DATE_TRUNC('day', hire_date) FROM employees"
+  constructs: ["TRUNC"]
+
+- name: trunc_date_month
+  category: functions
+  oracle: "SELECT TRUNC(hire_date, 'MM') FROM employees"
+  expected_postgresql: "SELECT DATE_TRUNC('month', hire_date) FROM employees"
+  constructs: ["TRUNC"]
+
+- name: extract_year
+  category: functions
+  oracle: "SELECT EXTRACT(YEAR FROM hire_date) FROM employees"
+  expected_postgresql: "SELECT EXTRACT(YEAR FROM hire_date) FROM employees"
+  constructs: ["EXTRACT"]
+  tags: ["no_change"]
+
+- name: to_date_with_format
+  category: functions
+  oracle: "SELECT TO_DATE('15-JAN-2024', 'DD-MON-YYYY') FROM DUAL"
+  expected_postgresql: "SELECT TO_DATE('15-JAN-2024', 'DD-Mon-YYYY')"
+  constructs: ["TO_DATE", "DUAL"]
+
+- name: to_char_date_format
+  category: functions
+  oracle: "SELECT TO_CHAR(hire_date, 'DD/MM/YYYY HH24:MI:SS') FROM employees"
+  expected_postgresql: "SELECT TO_CHAR(hire_date, 'DD/MM/YYYY HH24:MI:SS') FROM employees"
+  constructs: ["TO_CHAR"]
+  tags: ["no_change"]
+
+- name: date_arithmetic
+  category: functions
+  oracle: "SELECT hire_date + 1, hire_date + 1/24, hire_date - termination_date FROM employees"
+  expected_postgresql: "SELECT hire_date + INTERVAL '1 day', hire_date + INTERVAL '1 hour', EXTRACT(DAY FROM (hire_date - termination_date)) FROM employees"
+  constructs: ["DATE_ARITHMETIC"]
+  complexity: 3

@@ -1,0 +1,53 @@
+{
+  "commands": {
+    "scan": {
+      "help": "Pindai skema Oracle/PostgreSQL dan buat laporan kesiapan migrasi",
+      "scanning": "Memindai {file}...",
+      "found_objects": "{count} objek ditemukan",
+      "complexity": "Kompleksitas: {score}/10",
+      "complete": "Pemindaian selesai dalam {seconds}d"
+    },
+    "convert": {
+      "help": "Konversi Oracle SQL/PL-SQL ke PostgreSQL (atau sebaliknya)",
+      "converting": "Mengonversi {count} objek...",
+      "rules_only": "Menggunakan mode aturan saja (cakupan 90%)",
+      "ai_required": "Konversi berbantuan AI memerlukan pendaftaran (gratis).\nDaftar: stein auth register --email you@company.com\nAtau gunakan mode aturan saja: stein convert myfile.sql",
+      "complete": "{converted}/{total} objek dikonversi",
+      "forwarded": "{count} objek diteruskan ke AI"
+    },
+    "verify": {
+      "help": "Verifikasi kebenaran output PostgreSQL/Oracle yang telah dikonversi",
+      "verifying": "Memverifikasi {count} file...",
+      "green": "HIJAU — kepercayaan tinggi",
+      "yellow": "KUNING — tinjauan disarankan",
+      "red": "MERAH — perlu koreksi manual"
+    },
+    "auth": {
+      "register_help": "Daftarkan akun SteinDB gratis",
+      "register_success": "Pendaftaran berhasil!",
+      "register_prompt": "Alamat email",
+      "login_help": "Masuk dengan token yang sudah ada",
+      "logout_help": "Hapus token tersimpan",
+      "logout_success": "Berhasil keluar. Mode aturan saja tetap berfungsi tanpa token.",
+      "status_help": "Tampilkan status autentikasi saat ini",
+      "status_authenticated": "Terautentikasi",
+      "status_not_authenticated": "Belum terautentikasi",
+      "upgrade_help": "Tingkatkan akun Anda ke paket berbayar"
+    }
+  },
+  "errors": {
+    "file_not_found": "File tidak ditemukan: {path}",
+    "invalid_sql": "Input SQL tidak valid",
+    "connection_failed": "Koneksi gagal: {error}",
+    "no_objects": "Tidak ada objek ditemukan dalam input"
+  },
+  "report": {
+    "title": "Laporan Migrasi SteinDB",
+    "summary": "Ringkasan",
+    "total_objects": "Total Objek",
+    "auto_convertible": "Dapat Dikonversi Otomatis",
+    "needs_ai": "Membutuhkan Bantuan AI",
+    "complexity_avg": "Rata-rata Kompleksitas",
+    "savings_estimate": "Estimasi Penghematan"
+  }
+}

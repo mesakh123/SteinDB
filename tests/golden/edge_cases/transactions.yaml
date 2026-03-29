@@ -1,0 +1,165 @@
+# =============================================================================
+# SteinDB Golden Tests — Transaction & Concurrency Edge Cases
+# From issues.md Sections 4-5: PL/SQL rollback, DDL commits, mutating tables
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# ORACLE PARTIAL ROLLBACK → PG EXCEPTION BLOCK WITH SAVEPOINT
+# ---------------------------------------------------------------------------
+
+- name: partial_rollback_exception_block
+  category: edge_cases
+  oracle: >-
+    BEGIN
+      INSERT INTO log_table VALUES (1, 'step1');
+      INSERT INTO log_table VALUES (2, 'step2');
+      INSERT INTO log_table VALUES (NULL, 'step3');
+    END;
+  expected_postgresql: >-
+    DO $$
+    BEGIN
+      INSERT INTO log_table VALUES (1, 'step1');
+      BEGIN
+        INSERT INTO log_table VALUES (2, 'step2');
+      EXCEPTION WHEN OTHERS THEN
+        NULL;
+      END;
+      BEGIN
+        INSERT INTO log_table VALUES (NULL, 'step3');
+      EXCEPTION WHEN OTHERS THEN
+        NULL;
+      END;
+    END;
+    $$
+  complexity: 7
+  constructs: ["EXCEPTION_HANDLING", "SAVEPOINT", "ANONYMOUS_BLOCK"]
+  tags: ["transactions", "partial_rollback", "section4"]
+  acceptance_criteria:
+    - "Oracle: failed statement rolls back only that statement"
+    - "PG: any failed statement aborts the entire transaction"
+    - "Wrap each statement in EXCEPTION block to mimic Oracle behavior"
+    - "WARNING: excessive EXCEPTION blocks create savepoints — performance impact"
+
+- name: savepoint_explicit_pattern
+  category: edge_cases
+  oracle: >-
+    BEGIN
+      SAVEPOINT sp1;
+      UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+      SAVEPOINT sp2;
+      UPDATE accounts SET balance = balance + 100 WHERE id = 2;
+    EXCEPTION
+      WHEN OTHERS THEN
+        ROLLBACK TO sp1;
+    END;
+  expected_postgresql: >-
+    DO $$
+    BEGIN
+      UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+      BEGIN
+        UPDATE accounts SET balance = balance + 100 WHERE id = 2;
+      EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Rolling back transfer';
+      END;
+    END;
+    $$
+  complexity: 6
+  constructs: ["SAVEPOINT", "EXCEPTION_HANDLING", "ROLLBACK"]
+  tags: ["transactions", "savepoint", "section4"]
+  acceptance_criteria:
+    - "PG EXCEPTION blocks implicitly create savepoints"
+    - "Explicit SAVEPOINT in PG also supported but less idiomatic in plpgsql"
+
+# ---------------------------------------------------------------------------
+# DDL IMPLICIT COMMIT (P2O warning)
+# ---------------------------------------------------------------------------
+
+- name: ddl_implicit_commit_warning
+  category: edge_cases
+  oracle: >-
+    BEGIN
+      CREATE TABLE temp_data (id NUMBER(9));
+      INSERT INTO temp_data VALUES (1);
+      ROLLBACK;
+    END;
+  expected_postgresql: >-
+    DO $$
+    BEGIN
+      CREATE TABLE temp_data (id INTEGER);
+      INSERT INTO temp_data VALUES (1);
+      ROLLBACK;
+    END;
+    $$
+  complexity: 6
+  constructs: ["DDL", "IMPLICIT_COMMIT", "ROLLBACK"]
+  tags: ["transactions", "ddl_commit", "section5"]
+  acceptance_criteria:
+    - "WARNING: In Oracle, CREATE TABLE issues implicit COMMIT"
+    - "The ROLLBACK only undoes the INSERT, not the CREATE TABLE"
+    - "In PG, DDL is transactional — ROLLBACK undoes everything"
+    - "P2O: developers must understand DDL commits in Oracle"
+
+# ---------------------------------------------------------------------------
+# MUTATING TABLE ERROR (P2O: PG allows, Oracle doesn't)
+# ---------------------------------------------------------------------------
+
+- name: mutating_table_trigger_warning
+  category: edge_cases
+  oracle: >-
+    CREATE OR REPLACE TRIGGER trg_check_salary
+    BEFORE UPDATE ON employees
+    FOR EACH ROW
+    DECLARE
+      v_avg_salary NUMBER;
+    BEGIN
+      SELECT AVG(salary) INTO v_avg_salary FROM employees;
+      IF :NEW.salary > v_avg_salary * 3 THEN
+        RAISE_APPLICATION_ERROR(-20001, 'Salary too high');
+      END IF;
+    END;
+  expected_postgresql: >-
+    CREATE OR REPLACE FUNCTION trg_check_salary_fn()
+    RETURNS TRIGGER AS $$
+    DECLARE
+      v_avg_salary NUMERIC;
+    BEGIN
+      SELECT AVG(salary) INTO v_avg_salary FROM employees;
+      IF NEW.salary > v_avg_salary * 3 THEN
+        RAISE EXCEPTION 'Salary too high';
+      END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_check_salary
+    BEFORE UPDATE ON employees
+    FOR EACH ROW
+    EXECUTE FUNCTION trg_check_salary_fn()
+  complexity: 8
+  constructs: ["TRIGGER", "MUTATING_TABLE", "RAISE_APPLICATION_ERROR"]
+  tags: ["transactions", "mutating_table", "section4"]
+  acceptance_criteria:
+    - "PG allows row-level triggers to query the table being modified"
+    - "Oracle raises ORA-04091 (mutating table error) for this pattern"
+    - "WARNING for P2O: this trigger must be rewritten for Oracle"
+    - "P2O solution: use compound triggers or statement-level triggers"
+
+# ---------------------------------------------------------------------------
+# VACUUM / BLOAT AWARENESS
+# ---------------------------------------------------------------------------
+
+- name: heavy_update_bloat_warning
+  category: edge_cases
+  oracle: >-
+    UPDATE large_table SET status = 'PROCESSED'
+    WHERE created_date < SYSDATE - 30
+  expected_postgresql: >-
+    UPDATE large_table SET status = 'PROCESSED'
+    WHERE created_date < CURRENT_TIMESTAMP - INTERVAL '30 days'
+  complexity: 4
+  constructs: ["DATE_ARITHMETIC", "SYSDATE", "MVCC_BLOAT"]
+  tags: ["transactions", "vacuum", "bloat", "section5"]
+  acceptance_criteria:
+    - "WARNING: Heavy UPDATE workloads in PG leave dead tuples"
+    - "Oracle uses UNDO segments — main table stays clean"
+    - "PG requires aggressive autovacuum tuning for Oracle-like workloads"
+    - "Monitor pg_stat_user_tables.n_dead_tup after bulk updates"

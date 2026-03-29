@@ -1,0 +1,188 @@
+# Golden tests: Oracle implicit type casting -> PostgreSQL explicit casting
+# Oracle is permissive with implicit casts; PG requires explicit CAST or :: operator
+
+- name: implicit_string_to_number_in_where
+  category: syntax
+  oracle: "SELECT * FROM orders WHERE amount = '123'"
+  expected_postgresql: "SELECT * FROM orders WHERE amount = '123'::NUMERIC"
+  complexity: 3
+  constructs: ["IMPLICIT_CAST"]
+  tags: ["type_casting", "critical_behavioral_difference"]
+  acceptance_criteria:
+    - "Oracle implicitly casts '123' to NUMBER for comparison"
+    - "PG requires explicit cast or will fail with type mismatch"
+
+- name: implicit_number_to_string_concat
+  category: syntax
+  oracle: "SELECT 'Order #' || order_id || ' total: ' || amount FROM orders"
+  expected_postgresql: "SELECT 'Order #' || order_id::TEXT || ' total: ' || amount::TEXT FROM orders"
+  complexity: 3
+  constructs: ["IMPLICIT_CAST", "CONCATENATION"]
+  tags: ["type_casting"]
+  acceptance_criteria:
+    - "Oracle auto-casts NUMBER to VARCHAR2 in concatenation"
+    - "PG requires explicit ::TEXT cast for non-text types in concatenation"
+
+- name: date_string_comparison
+  category: syntax
+  oracle: "SELECT * FROM events WHERE event_date > '2024-01-01'"
+  expected_postgresql: "SELECT * FROM events WHERE event_date > '2024-01-01'::TIMESTAMP"
+  complexity: 3
+  constructs: ["IMPLICIT_CAST", "DATE_COMPARISON"]
+  tags: ["type_casting"]
+  acceptance_criteria:
+    - "Oracle implicitly converts string to DATE using NLS_DATE_FORMAT"
+    - "PG requires explicit cast to TIMESTAMP or DATE"
+
+- name: boolean_like_flag_comparison
+  category: syntax
+  oracle: "SELECT * FROM users WHERE active_flag = 'Y'"
+  expected_postgresql: "SELECT * FROM users WHERE active_flag = 'Y'"
+  complexity: 1
+  constructs: ["CHAR_COMPARISON"]
+  tags: ["type_casting", "no_change"]
+  acceptance_criteria:
+    - "If column is CHAR/VARCHAR, comparison is the same"
+    - "Note: consider migrating to BOOLEAN type for better PG idiom"
+
+- name: oracle_date_format_implicit
+  category: syntax
+  oracle: "SELECT * FROM employees WHERE hire_date = '15-JAN-2024'"
+  expected_postgresql: "SELECT * FROM employees WHERE hire_date = TO_DATE('15-JAN-2024', 'DD-Mon-YYYY')"
+  complexity: 4
+  constructs: ["IMPLICIT_CAST", "DATE_FORMAT"]
+  tags: ["type_casting"]
+  acceptance_criteria:
+    - "Oracle uses NLS_DATE_FORMAT for implicit string-to-date conversion"
+    - "PG requires explicit TO_DATE with format mask"
+
+- name: number_to_varchar2_implicit
+  category: syntax
+  oracle: |
+    CREATE OR REPLACE FUNCTION format_amount(p_amount NUMBER) RETURN VARCHAR2 IS
+      v_result VARCHAR2(50);
+    BEGIN
+      v_result := p_amount;
+      RETURN v_result;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION format_amount(p_amount NUMERIC) RETURNS VARCHAR
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_result VARCHAR(50);
+    BEGIN
+      v_result := p_amount::TEXT;
+      RETURN v_result;
+    END;
+    $$;
+  complexity: 3
+  constructs: ["IMPLICIT_CAST", "ASSIGNMENT"]
+  tags: ["type_casting"]
+  acceptance_criteria:
+    - "Oracle implicitly casts NUMBER to VARCHAR2 on assignment"
+    - "PG requires explicit ::TEXT cast"
+
+- name: pls_integer_to_integer
+  category: syntax
+  oracle: |
+    CREATE OR REPLACE PROCEDURE counter_proc IS
+      v_count PLS_INTEGER := 0;
+      v_limit PLS_INTEGER := 1000;
+    BEGIN
+      WHILE v_count < v_limit LOOP
+        v_count := v_count + 1;
+      END LOOP;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE counter_proc()
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_count INTEGER := 0;
+      v_limit INTEGER := 1000;
+    BEGIN
+      WHILE v_count < v_limit LOOP
+        v_count := v_count + 1;
+      END LOOP;
+    END;
+    $$;
+  complexity: 2
+  constructs: ["PLS_INTEGER"]
+  tags: ["type_casting", "data_types"]
+
+- name: binary_integer_to_integer
+  category: syntax
+  oracle: |
+    CREATE OR REPLACE FUNCTION get_index RETURN BINARY_INTEGER IS
+      v_idx BINARY_INTEGER;
+    BEGIN
+      v_idx := 42;
+      RETURN v_idx;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION get_index() RETURNS INTEGER
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_idx INTEGER;
+    BEGIN
+      v_idx := 42;
+      RETURN v_idx;
+    END;
+    $$;
+  complexity: 2
+  constructs: ["BINARY_INTEGER"]
+  tags: ["type_casting", "data_types"]
+
+- name: sys_refcursor_to_refcursor
+  category: syntax
+  oracle: |
+    CREATE OR REPLACE FUNCTION get_employees_cursor RETURN SYS_REFCURSOR IS
+      v_cursor SYS_REFCURSOR;
+    BEGIN
+      OPEN v_cursor FOR SELECT id, name FROM employees;
+      RETURN v_cursor;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION get_employees_cursor() RETURNS REFCURSOR
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_cursor REFCURSOR;
+    BEGIN
+      OPEN v_cursor FOR SELECT id, name FROM employees;
+      RETURN v_cursor;
+    END;
+    $$;
+  complexity: 4
+  constructs: ["SYS_REFCURSOR", "REFCURSOR"]
+  tags: ["type_casting", "cursors"]
+
+- name: varchar2_to_varchar_or_text
+  category: syntax
+  oracle: |
+    CREATE OR REPLACE PROCEDURE process_text IS
+      v_short VARCHAR2(100);
+      v_long VARCHAR2(4000);
+      v_max VARCHAR2(32767);
+    BEGIN
+      v_short := 'hello';
+      v_long := RPAD('x', 4000, 'x');
+      v_max := RPAD('y', 32767, 'y');
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE process_text()
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_short VARCHAR(100);
+      v_long VARCHAR(4000);
+      v_max TEXT;
+    BEGIN
+      v_short := 'hello';
+      v_long := RPAD('x', 4000, 'x');
+      v_max := RPAD('y', 32767, 'y');
+    END;
+    $$;
+  complexity: 2
+  constructs: ["VARCHAR2"]
+  tags: ["type_casting", "data_types"]
+  acceptance_criteria:
+    - "VARCHAR2 maps to VARCHAR in PG"
+    - "VARCHAR2(32767) in PL/SQL should map to TEXT (no practical limit in PG)"

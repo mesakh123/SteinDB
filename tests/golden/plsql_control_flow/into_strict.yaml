@@ -1,0 +1,263 @@
+# Golden tests: Oracle SELECT INTO vs PostgreSQL INTO STRICT
+# CRITICAL: Oracle SELECT INTO raises NO_DATA_FOUND automatically.
+# PG SELECT INTO without STRICT returns NULL silently — a major bug source!
+
+- name: select_into_without_strict_critical
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE FUNCTION get_employee_name(p_id NUMBER) RETURN VARCHAR2 IS
+      v_name VARCHAR2(100);
+    BEGIN
+      SELECT name INTO v_name FROM employees WHERE id = p_id;
+      RETURN v_name;
+    EXCEPTION
+      WHEN NO_DATA_FOUND THEN
+        RETURN NULL;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION get_employee_name(p_id INTEGER) RETURNS VARCHAR
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_name VARCHAR(100);
+    BEGIN
+      SELECT name INTO STRICT v_name FROM employees WHERE id = p_id;
+      RETURN v_name;
+    EXCEPTION
+      WHEN NO_DATA_FOUND THEN
+        RETURN NULL;
+    END;
+    $$;
+  complexity: 5
+  constructs: ["SELECT INTO", "NO_DATA_FOUND", "INTO STRICT"]
+  tags: ["into_strict", "critical_behavioral_difference"]
+  acceptance_criteria:
+    - "STRICT keyword is REQUIRED in PG to match Oracle behavior"
+    - "Without STRICT, PG silently returns NULL instead of raising NO_DATA_FOUND"
+    - "This is the #1 silent bug source in Oracle-to-PG migrations"
+
+- name: select_into_strict_correct
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE get_salary(p_emp_id NUMBER) IS
+      v_salary NUMBER;
+    BEGIN
+      SELECT salary INTO v_salary FROM employees WHERE id = p_emp_id;
+      DBMS_OUTPUT.PUT_LINE('Salary: ' || v_salary);
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE get_salary(p_emp_id INTEGER)
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_salary NUMERIC;
+    BEGIN
+      SELECT salary INTO STRICT v_salary FROM employees WHERE id = p_emp_id;
+      RAISE NOTICE 'Salary: %', v_salary;
+    END;
+    $$;
+  complexity: 4
+  constructs: ["SELECT INTO", "INTO STRICT", "DBMS_OUTPUT"]
+  tags: ["into_strict"]
+  acceptance_criteria:
+    - "Every Oracle SELECT INTO must become SELECT INTO STRICT in PG"
+
+- name: select_into_too_many_rows
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE FUNCTION get_dept_manager(p_dept_id NUMBER) RETURN NUMBER IS
+      v_mgr_id NUMBER;
+    BEGIN
+      SELECT manager_id INTO v_mgr_id FROM departments WHERE dept_id = p_dept_id;
+      RETURN v_mgr_id;
+    EXCEPTION
+      WHEN TOO_MANY_ROWS THEN
+        RETURN -1;
+      WHEN NO_DATA_FOUND THEN
+        RETURN NULL;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION get_dept_manager(p_dept_id INTEGER) RETURNS INTEGER
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_mgr_id INTEGER;
+    BEGIN
+      SELECT manager_id INTO STRICT v_mgr_id FROM departments WHERE dept_id = p_dept_id;
+      RETURN v_mgr_id;
+    EXCEPTION
+      WHEN TOO_MANY_ROWS THEN
+        RETURN -1;
+      WHEN NO_DATA_FOUND THEN
+        RETURN NULL;
+    END;
+    $$;
+  complexity: 5
+  constructs: ["SELECT INTO", "INTO STRICT", "TOO_MANY_ROWS", "NO_DATA_FOUND"]
+  tags: ["into_strict"]
+  acceptance_criteria:
+    - "STRICT also raises TOO_MANY_ROWS when multiple rows returned"
+    - "Both Oracle and PG raise TOO_MANY_ROWS with the same semantics"
+
+- name: bulk_select_into_array
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE get_all_names IS
+      TYPE name_tab IS TABLE OF VARCHAR2(100);
+      v_names name_tab;
+    BEGIN
+      SELECT name BULK COLLECT INTO v_names FROM employees WHERE dept_id = 10;
+      FOR i IN 1..v_names.COUNT LOOP
+        DBMS_OUTPUT.PUT_LINE(v_names(i));
+      END LOOP;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE get_all_names()
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_names VARCHAR(100)[];
+    BEGIN
+      SELECT ARRAY_AGG(name) INTO v_names FROM employees WHERE dept_id = 10;
+      FOR i IN 1..array_length(v_names, 1) LOOP
+        RAISE NOTICE '%', v_names[i];
+      END LOOP;
+    END;
+    $$;
+  complexity: 6
+  constructs: ["BULK COLLECT", "TYPE TABLE OF", "DBMS_OUTPUT"]
+  tags: ["into_strict", "bulk_operations"]
+  acceptance_criteria:
+    - "BULK COLLECT INTO maps to ARRAY_AGG or array assignment"
+    - "Oracle collection .COUNT becomes array_length(arr, 1)"
+    - "Oracle 1-based index (i) maps to PG 1-based array index [i]"
+
+- name: insert_returning_into
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE create_order(p_customer_id NUMBER) IS
+      v_order_id NUMBER;
+    BEGIN
+      INSERT INTO orders (customer_id, status, created_at)
+      VALUES (p_customer_id, 'NEW', SYSDATE)
+      RETURNING id INTO v_order_id;
+      DBMS_OUTPUT.PUT_LINE('Created order: ' || v_order_id);
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE create_order(p_customer_id INTEGER)
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_order_id INTEGER;
+    BEGIN
+      INSERT INTO orders (customer_id, status, created_at)
+      VALUES (p_customer_id, 'NEW', CURRENT_TIMESTAMP)
+      RETURNING id INTO v_order_id;
+      RAISE NOTICE 'Created order: %', v_order_id;
+    END;
+    $$;
+  complexity: 4
+  constructs: ["RETURNING INTO", "SYSDATE", "DBMS_OUTPUT"]
+  tags: ["into_strict"]
+  acceptance_criteria:
+    - "RETURNING INTO works the same in both Oracle and PG"
+    - "No STRICT needed for RETURNING INTO (guaranteed single row from INSERT)"
+
+- name: variable_assignment_from_query
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE FUNCTION count_active_employees RETURN NUMBER IS
+      v_count NUMBER;
+    BEGIN
+      SELECT COUNT(*) INTO v_count FROM employees WHERE status = 'ACTIVE';
+      RETURN v_count;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE FUNCTION count_active_employees() RETURNS INTEGER
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_count INTEGER;
+    BEGIN
+      SELECT COUNT(*) INTO v_count FROM employees WHERE status = 'ACTIVE';
+      RETURN v_count;
+    END;
+    $$;
+  complexity: 2
+  constructs: ["SELECT INTO", "COUNT"]
+  tags: ["into_strict"]
+  acceptance_criteria:
+    - "Aggregate queries always return exactly one row"
+    - "STRICT is NOT needed when query is guaranteed to return one row (e.g., COUNT)"
+
+- name: cursor_fetch_into
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE process_employees IS
+      CURSOR c_emp IS SELECT id, name, salary FROM employees;
+      v_id NUMBER;
+      v_name VARCHAR2(100);
+      v_salary NUMBER;
+    BEGIN
+      OPEN c_emp;
+      LOOP
+        FETCH c_emp INTO v_id, v_name, v_salary;
+        EXIT WHEN c_emp%NOTFOUND;
+        DBMS_OUTPUT.PUT_LINE(v_name || ': ' || v_salary);
+      END LOOP;
+      CLOSE c_emp;
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE process_employees()
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      c_emp CURSOR FOR SELECT id, name, salary FROM employees;
+      v_id INTEGER;
+      v_name VARCHAR(100);
+      v_salary NUMERIC;
+    BEGIN
+      OPEN c_emp;
+      LOOP
+        FETCH c_emp INTO v_id, v_name, v_salary;
+        EXIT WHEN NOT FOUND;
+        RAISE NOTICE '%: %', v_name, v_salary;
+      END LOOP;
+      CLOSE c_emp;
+    END;
+    $$;
+  complexity: 5
+  constructs: ["CURSOR", "FETCH INTO", "%NOTFOUND", "DBMS_OUTPUT"]
+  tags: ["into_strict", "cursors"]
+  acceptance_criteria:
+    - "FETCH INTO does not need STRICT (cursor semantics handle EOF via FOUND)"
+    - "%NOTFOUND becomes NOT FOUND in PG"
+
+- name: notfound_after_select_into
+  category: plsql_control_flow
+  oracle: |
+    CREATE OR REPLACE PROCEDURE check_exists(p_id NUMBER) IS
+      v_name VARCHAR2(100);
+    BEGIN
+      BEGIN
+        SELECT name INTO v_name FROM employees WHERE id = p_id;
+      EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          v_name := 'UNKNOWN';
+      END;
+      DBMS_OUTPUT.PUT_LINE('Name: ' || v_name);
+    END;
+  expected_postgresql: |
+    CREATE OR REPLACE PROCEDURE check_exists(p_id INTEGER)
+    LANGUAGE plpgsql AS $$
+    DECLARE
+      v_name VARCHAR(100);
+    BEGIN
+      BEGIN
+        SELECT name INTO STRICT v_name FROM employees WHERE id = p_id;
+      EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          v_name := 'UNKNOWN';
+      END;
+      RAISE NOTICE 'Name: %', v_name;
+    END;
+    $$;
+  complexity: 5
+  constructs: ["SELECT INTO", "INTO STRICT", "NO_DATA_FOUND", "DBMS_OUTPUT"]
+  tags: ["into_strict", "critical_behavioral_difference"]
+  acceptance_criteria:
+    - "Nested BEGIN/EXCEPTION block pattern is identical in both"
+    - "STRICT is essential to trigger NO_DATA_FOUND in PG"

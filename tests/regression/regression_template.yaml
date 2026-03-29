@@ -1,0 +1,21 @@
+# Regression Test Template
+# ========================
+# Copy this file and fill in the fields to add a new regression test.
+# Every bug fix MUST become a regression test (see Plan 12).
+#
+# File naming convention: COR-NNN-short-description.yaml
+# Example: COR-001-select-into-strict.yaml
+
+# Each file contains a YAML list of test cases:
+- id: "COR-NNN"
+  description: "Short description of the bug that was fixed"
+  bug_report: "Link to issue or PR that fixed this bug"
+  oracle_input: |
+    -- The Oracle SQL that triggered the bug
+    SELECT col INTO v_result FROM t WHERE id = 1;
+  expected_postgresql: |
+    -- The correct PostgreSQL output after the fix
+    SELECT col INTO STRICT v_result FROM t WHERE id = 1;
+  tags:
+    - select-into
+    - plsql

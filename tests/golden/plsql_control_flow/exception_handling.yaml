@@ -1,0 +1,178 @@
+# =============================================================================
+# SteinDB Golden Tests — PL/SQL Exception Handling Patterns (O2P)
+# Enterprise exception handling patterns from reviewer feedback
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Named exception → SQLSTATE mapping
+# ---------------------------------------------------------------------------
+
+- name: no_data_found_exception
+  category: plsql_control_flow
+  oracle: |
+    BEGIN
+      SELECT name INTO v_name FROM employees WHERE id = 999;
+    EXCEPTION
+      WHEN NO_DATA_FOUND THEN
+        v_name := 'Unknown';
+    END;
+  expected_postgresql: |
+    BEGIN
+      SELECT name INTO STRICT v_name FROM employees WHERE id = 999;
+    EXCEPTION
+      WHEN NO_DATA_FOUND THEN
+        v_name := 'Unknown';
+    END;
+  complexity: 3
+  constructs: ["NO_DATA_FOUND", "INTO"]
+  tags: ["exception", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle implicit SELECT INTO raises NO_DATA_FOUND"
+    - "PG requires INTO STRICT to raise NO_DATA_FOUND"
+
+- name: too_many_rows_exception
+  category: plsql_control_flow
+  oracle: |
+    BEGIN
+      SELECT name INTO v_name FROM employees WHERE department_id = 10;
+    EXCEPTION
+      WHEN TOO_MANY_ROWS THEN
+        v_name := 'Multiple';
+    END;
+  expected_postgresql: |
+    BEGIN
+      SELECT name INTO STRICT v_name FROM employees WHERE department_id = 10;
+    EXCEPTION
+      WHEN TOO_MANY_ROWS THEN
+        v_name := 'Multiple';
+    END;
+  complexity: 3
+  constructs: ["TOO_MANY_ROWS", "INTO"]
+  tags: ["exception", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle raises TOO_MANY_ROWS when SELECT INTO returns multiple rows"
+    - "PG also raises TOO_MANY_ROWS with INTO STRICT"
+
+- name: dup_val_on_index_exception
+  category: plsql_control_flow
+  oracle: |
+    BEGIN
+      INSERT INTO employees (id, name) VALUES (1, 'John');
+    EXCEPTION
+      WHEN DUP_VAL_ON_INDEX THEN
+        UPDATE employees SET name = 'John' WHERE id = 1;
+    END;
+  expected_postgresql: |
+    BEGIN
+      INSERT INTO employees (id, name) VALUES (1, 'John');
+    EXCEPTION
+      WHEN UNIQUE_VIOLATION THEN
+        UPDATE employees SET name = 'John' WHERE id = 1;
+    END;
+  complexity: 3
+  constructs: ["DUP_VAL_ON_INDEX"]
+  tags: ["exception", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle DUP_VAL_ON_INDEX maps to PG UNIQUE_VIOLATION"
+
+- name: custom_exception_raise
+  category: plsql_control_flow
+  oracle: |
+    DECLARE
+      e_invalid_salary EXCEPTION;
+      PRAGMA EXCEPTION_INIT(e_invalid_salary, -20001);
+    BEGIN
+      IF v_salary < 0 THEN
+        RAISE e_invalid_salary;
+      END IF;
+    EXCEPTION
+      WHEN e_invalid_salary THEN
+        DBMS_OUTPUT.PUT_LINE('Invalid salary');
+    END;
+  expected_postgresql: |
+    BEGIN
+      IF v_salary < 0 THEN
+        RAISE EXCEPTION 'Invalid salary' USING ERRCODE = 'P0001';
+      END IF;
+    EXCEPTION
+      WHEN SQLSTATE 'P0001' THEN
+        RAISE NOTICE 'Invalid salary';
+    END;
+  complexity: 6
+  constructs: ["EXCEPTION_INIT", "PRAGMA", "RAISE"]
+  tags: ["exception", "custom", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle custom exceptions with PRAGMA EXCEPTION_INIT map to SQLSTATE codes"
+    - "RAISE maps to RAISE EXCEPTION with ERRCODE"
+
+- name: raise_application_error
+  category: plsql_control_flow
+  oracle: |
+    BEGIN
+      IF v_age < 18 THEN
+        RAISE_APPLICATION_ERROR(-20100, 'Must be 18 or older');
+      END IF;
+    END;
+  expected_postgresql: |
+    BEGIN
+      IF v_age < 18 THEN
+        RAISE EXCEPTION 'Must be 18 or older' USING ERRCODE = 'P0001';
+      END IF;
+    END;
+  complexity: 3
+  constructs: ["RAISE_APPLICATION_ERROR"]
+  tags: ["exception", "reviewer_gap"]
+  acceptance_criteria:
+    - "RAISE_APPLICATION_ERROR maps to RAISE EXCEPTION"
+    - "Oracle error number lost; use custom ERRCODE"
+
+- name: sqlcode_sqlerrm
+  category: plsql_control_flow
+  oracle: |
+    BEGIN
+      NULL;
+    EXCEPTION
+      WHEN OTHERS THEN
+        v_code := SQLCODE;
+        v_msg := SQLERRM;
+        INSERT INTO error_log (code, message) VALUES (v_code, v_msg);
+    END;
+  expected_postgresql: |
+    BEGIN
+      NULL;
+    EXCEPTION
+      WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS v_code = RETURNED_SQLSTATE, v_msg = MESSAGE_TEXT;
+        INSERT INTO error_log (code, message) VALUES (v_code, v_msg);
+    END;
+  complexity: 5
+  constructs: ["SQLCODE", "SQLERRM"]
+  tags: ["exception", "diagnostics", "reviewer_gap"]
+  acceptance_criteria:
+    - "Oracle SQLCODE/SQLERRM map to GET STACKED DIAGNOSTICS"
+    - "SQLCODE returns number in Oracle, SQLSTATE string in PG"
+
+- name: when_others_then_raise
+  category: plsql_control_flow
+  oracle: |
+    BEGIN
+      process_data();
+    EXCEPTION
+      WHEN OTHERS THEN
+        log_error(SQLERRM);
+        RAISE;
+    END;
+  expected_postgresql: |
+    BEGIN
+      PERFORM process_data();
+    EXCEPTION
+      WHEN OTHERS THEN
+        PERFORM log_error(SQLERRM);
+        RAISE;
+    END;
+  complexity: 4
+  constructs: ["WHEN OTHERS", "RAISE"]
+  tags: ["exception", "re_raise", "reviewer_gap"]
+  acceptance_criteria:
+    - "RAISE without arguments re-raises the current exception in both Oracle and PG"
+    - "Procedure call as statement needs PERFORM in PG"

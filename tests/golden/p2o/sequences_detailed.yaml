@@ -1,0 +1,275 @@
+# =============================================================================
+# SteinDB Golden Tests — P2O Sequence Conversions (Detailed)
+# PostgreSQL sequence operations → Oracle sequence equivalents
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# CREATE SEQUENCE OPTIONS
+# ---------------------------------------------------------------------------
+
+- name: sequence_start_with
+  category: p2o_sequences
+  direction: pg_to_oracle
+  source: "CREATE SEQUENCE order_seq START WITH 1000"
+  expected: "CREATE SEQUENCE order_seq START WITH 1000"
+  constructs: ["SEQUENCE", "START WITH"]
+  tags: ["sequence", "p2o"]
+
+- name: sequence_increment_by
+  category: p2o_sequences
+  direction: pg_to_oracle
+  source: "CREATE SEQUENCE invoice_seq INCREMENT BY 5 START WITH 100"
+  expected: "CREATE SEQUENCE invoice_seq INCREMENT BY 5 START WITH 100"
+  constructs: ["SEQUENCE", "INCREMENT BY"]
+  tags: ["sequence", "p2o"]
+
+- name: sequence_minvalue_maxvalue
+  category: p2o_sequences
+  direction: pg_to_oracle
+  source: "CREATE SEQUENCE bounded_seq MINVALUE 1 MAXVALUE 999999 START WITH 1"
+  expected: "CREATE SEQUENCE bounded_seq MINVALUE 1 MAXVALUE 999999 START WITH 1"
+  constructs: ["SEQUENCE", "MINVALUE", "MAXVALUE"]
+  tags: ["sequence", "p2o"]
+
+- name: sequence_cache
+  category: p2o_sequences
+  direction: pg_to_oracle
+  source: "CREATE SEQUENCE fast_seq CACHE 50"
+  expected: "CREATE SEQUENCE fast_seq CACHE 50"
+  constructs: ["SEQUENCE", "CACHE"]
+  tags: ["sequence", "p2o"]
+
+- name: sequence_no_cycle
+  category: p2o_sequences
+  direction: pg_to_oracle
+  source: "CREATE SEQUENCE strict_seq NO CYCLE"
+  expected: "CREATE SEQUENCE strict_seq NOCYCLE"
+  constructs: ["SEQUENCE", "NO CYCLE"]
+  tags: ["sequence", "p2o"]
+  acceptance_criteria:
+    - "PG 'NO CYCLE' maps to Oracle 'NOCYCLE' (no space)"
+
+- name: sequence_owned_by_no_equivalent
+  category: p2o_sequences
+  direction: pg_to_oracle
+  source: "CREATE SEQUENCE emp_id_seq OWNED BY employees.id"
+  expected: >-
+    CREATE SEQUENCE emp_id_seq;
+    /* OWNED BY has no Oracle equivalent; sequence lifecycle is independent */
+    /* Comment: sequence was OWNED BY employees.id in PostgreSQL */
+  constructs: ["SEQUENCE", "OWNED BY"]
+  tags: ["sequence", "lossy", "p2o"]
+  acceptance_criteria:
+    - "PG OWNED BY ties sequence lifecycle to column (dropped with column)"
+    - "Oracle sequences are always independent objects"
+
+# ---------------------------------------------------------------------------
+# ALTER SEQUENCE
+# ---------------------------------------------------------------------------
+
+- name: alter_sequence_restart
+  category: p2o_sequences
+  direction: pg_to_oracle
+  source: "ALTER SEQUENCE order_seq RESTART WITH 5000"
+  expected: >-
+    /* Oracle has no RESTART; must drop and recreate or use INCREMENT BY trick */
+    DECLARE
+      v_curr NUMBER;
+    BEGIN
+      SELECT order_seq.NEXTVAL INTO v_curr FROM DUAL;
+      EXECUTE IMMEDIATE 'ALTER SEQUENCE order_seq INCREMENT BY ' || (5000 - v_curr - 1);
+      SELECT order_seq.NEXTVAL INTO v_curr FROM DUAL;
+      EXECUTE IMMEDIATE 'ALTER SEQUENCE order_seq INCREMENT BY 1';
+    END;
+    /
+  complexity: 6
+  constructs: ["ALTER SEQUENCE", "RESTART"]
+  tags: ["sequence", "p2o"]
+  acceptance_criteria:
+    - "Oracle has no ALTER SEQUENCE RESTART"
+    - "Must use INCREMENT BY trick to jump to desired value"
+
+- name: setval_to_alter_sequence
+  category: p2o_sequences
+  direction: pg_to_oracle
+  source: "SELECT setval('order_seq', 10000)"
+  expected: >-
+    /* setval has no Oracle equivalent; use INCREMENT BY trick */
+    DECLARE
+      v_curr NUMBER;
+    BEGIN
+      SELECT order_seq.NEXTVAL INTO v_curr FROM DUAL;
+      EXECUTE IMMEDIATE 'ALTER SEQUENCE order_seq INCREMENT BY ' || (10000 - v_curr);
+      SELECT order_seq.NEXTVAL INTO v_curr FROM DUAL;
+      EXECUTE IMMEDIATE 'ALTER SEQUENCE order_seq INCREMENT BY 1';
+    END;
+    /
+  complexity: 6
+  constructs: ["setval"]
+  tags: ["sequence", "p2o"]
+
+# ---------------------------------------------------------------------------
+# IDENTITY COLUMNS
+# ---------------------------------------------------------------------------
+
+- name: generated_always_as_identity
+  category: p2o_sequences
+  direction: pg_to_oracle
+  source: >-
+    CREATE TABLE employees (
+      id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      name VARCHAR(100)
+    )
+  expected: >-
+    CREATE TABLE employees (
+      id NUMBER(10) GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      name VARCHAR2(100)
+    )
+  constructs: ["GENERATED ALWAYS AS IDENTITY"]
+  tags: ["sequence", "identity", "p2o"]
+  acceptance_criteria:
+    - "Oracle 12c+ supports GENERATED ALWAYS AS IDENTITY natively"
+    - "Direct mapping; same semantics"
+
+- name: generated_by_default_as_identity
+  category: p2o_sequences
+  direction: pg_to_oracle
+  source: >-
+    CREATE TABLE products (
+      id INTEGER GENERATED BY DEFAULT AS IDENTITY (START WITH 100 INCREMENT BY 10),
+      name VARCHAR(200)
+    )
+  expected: >-
+    CREATE TABLE products (
+      id NUMBER(10) GENERATED BY DEFAULT AS IDENTITY (START WITH 100 INCREMENT BY 10),
+      name VARCHAR2(200)
+    )
+  constructs: ["GENERATED BY DEFAULT AS IDENTITY"]
+  tags: ["sequence", "identity", "p2o"]
+  acceptance_criteria:
+    - "Oracle 12c+ supports GENERATED BY DEFAULT AS IDENTITY natively"
+    - "Allows explicit value insertion unlike GENERATED ALWAYS"
+
+- name: sequence_nextval_syntax
+  category: p2o_sequences
+  direction: pg_to_oracle
+  source: "INSERT INTO orders (id, product) VALUES (nextval('order_seq'), 'Widget')"
+  expected: "INSERT INTO orders (id, product) VALUES (order_seq.NEXTVAL, 'Widget')"
+  constructs: ["nextval"]
+  tags: ["sequence", "p2o"]
+  acceptance_criteria:
+    - "PG nextval('seq') maps to Oracle seq.NEXTVAL"
+
+- name: sequence_currval_syntax
+  category: p2o_sequences
+  direction: pg_to_oracle
+  source: "SELECT currval('order_seq')"
+  expected: "SELECT order_seq.CURRVAL FROM DUAL"
+  constructs: ["currval"]
+  tags: ["sequence", "p2o"]
+
+# ---------------------------------------------------------------------------
+# ADDITIONAL SEQUENCE PATTERNS
+# ---------------------------------------------------------------------------
+
+- name: sequence_cycle
+  category: p2o_sequences
+  direction: pg_to_oracle
+  source: "CREATE SEQUENCE cyclic_seq MINVALUE 1 MAXVALUE 100 CYCLE"
+  expected: "CREATE SEQUENCE cyclic_seq MINVALUE 1 MAXVALUE 100 CYCLE"
+  constructs: ["SEQUENCE", "CYCLE"]
+  tags: ["sequence", "p2o"]
+
+- name: sequence_no_cache
+  category: p2o_sequences
+  direction: pg_to_oracle
+  source: "CREATE SEQUENCE strict_seq NO CYCLE CACHE 1"
+  expected: "CREATE SEQUENCE strict_seq NOCYCLE NOCACHE"
+  constructs: ["SEQUENCE", "CACHE 1"]
+  tags: ["sequence", "p2o"]
+  acceptance_criteria:
+    - "PG CACHE 1 effectively means no caching"
+    - "Oracle uses NOCACHE for the same behavior"
+
+- name: serial_to_sequence_and_trigger
+  category: p2o_sequences
+  direction: pg_to_oracle
+  source: "CREATE TABLE items (id SERIAL PRIMARY KEY, name VARCHAR(100))"
+  expected: >-
+    CREATE TABLE items (id NUMBER(10) NOT NULL PRIMARY KEY, name VARCHAR2(100));
+    CREATE SEQUENCE items_id_seq START WITH 1;
+    CREATE OR REPLACE TRIGGER items_id_trg BEFORE INSERT ON items
+    FOR EACH ROW BEGIN :NEW.id := items_id_seq.NEXTVAL; END;
+  constructs: ["SERIAL"]
+  tags: ["sequence", "serial", "p2o"]
+
+- name: bigserial_to_sequence
+  category: p2o_sequences
+  direction: pg_to_oracle
+  source: "CREATE TABLE events (id BIGSERIAL PRIMARY KEY, data TEXT)"
+  expected: >-
+    CREATE TABLE events (id NUMBER(19) NOT NULL PRIMARY KEY, data CLOB);
+    CREATE SEQUENCE events_id_seq START WITH 1;
+    CREATE OR REPLACE TRIGGER events_id_trg BEFORE INSERT ON events
+    FOR EACH ROW BEGIN :NEW.id := events_id_seq.NEXTVAL; END;
+  constructs: ["BIGSERIAL"]
+  tags: ["sequence", "serial", "p2o"]
+
+- name: smallserial_to_sequence
+  category: p2o_sequences
+  direction: pg_to_oracle
+  source: "CREATE TABLE codes (id SMALLSERIAL PRIMARY KEY, code CHAR(5))"
+  expected: >-
+    CREATE TABLE codes (id NUMBER(5) NOT NULL PRIMARY KEY, code CHAR(5));
+    CREATE SEQUENCE codes_id_seq START WITH 1 MAXVALUE 32767;
+    CREATE OR REPLACE TRIGGER codes_id_trg BEFORE INSERT ON codes
+    FOR EACH ROW BEGIN :NEW.id := codes_id_seq.NEXTVAL; END;
+  constructs: ["SMALLSERIAL"]
+  tags: ["sequence", "serial", "p2o"]
+
+- name: alter_sequence_owned_by
+  category: p2o_sequences
+  direction: pg_to_oracle
+  source: "ALTER SEQUENCE order_seq OWNED BY orders.id"
+  expected: >-
+    /* Oracle has no OWNED BY; sequence lifecycle is independent */
+    /* No action needed; document the PG dependency for reference */
+  constructs: ["ALTER SEQUENCE", "OWNED BY"]
+  tags: ["sequence", "lossy", "p2o"]
+
+- name: sequence_in_default
+  category: p2o_sequences
+  direction: pg_to_oracle
+  source: >-
+    CREATE SEQUENCE invoice_num_seq START WITH 1000;
+    CREATE TABLE invoices (
+      id SERIAL PRIMARY KEY,
+      invoice_num INTEGER DEFAULT nextval('invoice_num_seq')
+    )
+  expected: >-
+    CREATE SEQUENCE invoice_num_seq START WITH 1000;
+    CREATE TABLE invoices (
+      id NUMBER(10) NOT NULL PRIMARY KEY,
+      invoice_num NUMBER(10) DEFAULT invoice_num_seq.NEXTVAL
+    );
+    CREATE SEQUENCE invoices_id_seq START WITH 1;
+    CREATE OR REPLACE TRIGGER invoices_id_trg BEFORE INSERT ON invoices
+    FOR EACH ROW BEGIN :NEW.id := invoices_id_seq.NEXTVAL; END;
+  constructs: ["SEQUENCE", "DEFAULT nextval"]
+  tags: ["sequence", "p2o"]
+  acceptance_criteria:
+    - "Oracle 12c+ supports sequence.NEXTVAL in DEFAULT clause"
+
+- name: drop_sequence_if_exists
+  category: p2o_sequences
+  direction: pg_to_oracle
+  source: "DROP SEQUENCE IF EXISTS order_seq"
+  expected: >-
+    BEGIN
+      EXECUTE IMMEDIATE 'DROP SEQUENCE order_seq';
+    EXCEPTION WHEN OTHERS THEN
+      IF SQLCODE != -2289 THEN RAISE; END IF;
+    END;
+    /
+  constructs: ["DROP SEQUENCE", "IF EXISTS"]
+  tags: ["sequence", "p2o"]

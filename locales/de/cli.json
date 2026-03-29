@@ -1,0 +1,53 @@
+{
+  "commands": {
+    "scan": {
+      "help": "Oracle/PostgreSQL-Schema scannen und Migrationsbereitschaftsbericht erstellen",
+      "scanning": "{file} wird gescannt...",
+      "found_objects": "{count} Objekte gefunden",
+      "complexity": "Komplexität: {score}/10",
+      "complete": "Scan abgeschlossen in {seconds}s"
+    },
+    "convert": {
+      "help": "Oracle SQL/PL-SQL nach PostgreSQL konvertieren (oder umgekehrt)",
+      "converting": "{count} Objekte werden konvertiert...",
+      "rules_only": "Nur-Regeln-Modus wird verwendet (90% Abdeckung)",
+      "ai_required": "KI-gestützte Konvertierung erfordert eine Registrierung (kostenlos).\nRegistrieren: stein auth register --email you@company.com\nOder verwenden Sie den Nur-Regeln-Modus: stein convert myfile.sql",
+      "complete": "{converted}/{total} Objekte konvertiert",
+      "forwarded": "{count} Objekte an KI weitergeleitet"
+    },
+    "verify": {
+      "help": "Konvertierte PostgreSQL/Oracle-Ausgabe auf Korrektheit überprüfen",
+      "verifying": "{count} Dateien werden überprüft...",
+      "green": "GRÜN — hohe Konfidenz",
+      "yellow": "GELB — Überprüfung empfohlen",
+      "red": "ROT — manuelle Korrektur erforderlich"
+    },
+    "auth": {
+      "register_help": "Kostenloses SteinDB-Konto registrieren",
+      "register_success": "Registrierung erfolgreich!",
+      "register_prompt": "E-Mail-Adresse",
+      "login_help": "Mit einem vorhandenen Token anmelden",
+      "logout_help": "Gespeichertes Token entfernen",
+      "logout_success": "Abgemeldet. Der Nur-Regeln-Modus funktioniert weiterhin ohne Token.",
+      "status_help": "Aktuellen Authentifizierungsstatus anzeigen",
+      "status_authenticated": "Authentifiziert",
+      "status_not_authenticated": "Nicht authentifiziert",
+      "upgrade_help": "Ihr Konto auf einen kostenpflichtigen Tarif upgraden"
+    }
+  },
+  "errors": {
+    "file_not_found": "Datei nicht gefunden: {path}",
+    "invalid_sql": "Ungültige SQL-Eingabe",
+    "connection_failed": "Verbindung fehlgeschlagen: {error}",
+    "no_objects": "Keine Objekte in der Eingabe gefunden"
+  },
+  "report": {
+    "title": "SteinDB-Migrationsbericht",
+    "summary": "Zusammenfassung",
+    "total_objects": "Objekte gesamt",
+    "auto_convertible": "Automatisch konvertierbar",
+    "needs_ai": "KI-Unterstützung erforderlich",
+    "complexity_avg": "Durchschnittliche Komplexität",
+    "savings_estimate": "Geschätzte Einsparungen"
+  }
+}

@@ -1,0 +1,37 @@
+- name: simple_connect_by
+  category: connect_by
+  complexity: 4
+  constructs: ["CONNECT BY", "LEVEL"]
+  oracle: |
+    SELECT employee_id, manager_id, LEVEL as depth
+    FROM employees
+    START WITH manager_id IS NULL
+    CONNECT BY PRIOR employee_id = manager_id
+  expected_postgresql: |
+    WITH RECURSIVE emp_tree AS (
+      SELECT employee_id, manager_id, 1 AS depth
+      FROM employees WHERE manager_id IS NULL
+      UNION ALL
+      SELECT e.employee_id, e.manager_id, t.depth + 1
+      FROM employees e JOIN emp_tree t ON e.manager_id = t.employee_id
+    )
+    SELECT employee_id, manager_id, depth FROM emp_tree
+
+- name: connect_by_with_path
+  category: connect_by
+  complexity: 6
+  constructs: ["CONNECT BY", "SYS_CONNECT_BY_PATH"]
+  oracle: |
+    SELECT employee_id, SYS_CONNECT_BY_PATH(last_name, '/') as path
+    FROM employees
+    START WITH manager_id IS NULL
+    CONNECT BY PRIOR employee_id = manager_id
+  expected_postgresql: |
+    WITH RECURSIVE emp_tree AS (
+      SELECT employee_id, '/' || last_name AS path, last_name
+      FROM employees WHERE manager_id IS NULL
+      UNION ALL
+      SELECT e.employee_id, t.path || '/' || e.last_name, e.last_name
+      FROM employees e JOIN emp_tree t ON e.manager_id = t.employee_id
+    )
+    SELECT employee_id, path FROM emp_tree

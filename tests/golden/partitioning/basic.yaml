@@ -1,0 +1,114 @@
+- name: range_partition
+  category: partitioning
+  oracle: |
+    CREATE TABLE sales (
+      id NUMBER, sale_date DATE, amount NUMBER(10,2)
+    ) PARTITION BY RANGE (sale_date) (
+      PARTITION p_2023 VALUES LESS THAN (TO_DATE('2024-01-01', 'YYYY-MM-DD')),
+      PARTITION p_2024 VALUES LESS THAN (TO_DATE('2025-01-01', 'YYYY-MM-DD')),
+      PARTITION p_max VALUES LESS THAN (MAXVALUE)
+    );
+  expected_postgresql: |
+    CREATE TABLE sales (
+      id INTEGER, sale_date TIMESTAMP, amount NUMERIC(10,2)
+    ) PARTITION BY RANGE (sale_date);
+    CREATE TABLE sales_p_2023 PARTITION OF sales FOR VALUES FROM (MINVALUE) TO ('2024-01-01');
+    CREATE TABLE sales_p_2024 PARTITION OF sales FOR VALUES FROM ('2024-01-01') TO ('2025-01-01');
+    CREATE TABLE sales_p_max PARTITION OF sales DEFAULT;
+  complexity: 5
+  constructs: ["PARTITION BY RANGE", "MAXVALUE"]
+
+- name: list_partition
+  category: partitioning
+  oracle: |
+    CREATE TABLE orders (
+      id NUMBER, region VARCHAR2(20), total NUMBER(10,2)
+    ) PARTITION BY LIST (region) (
+      PARTITION p_east VALUES ('NY', 'NJ', 'CT'),
+      PARTITION p_west VALUES ('CA', 'WA', 'OR'),
+      PARTITION p_other VALUES (DEFAULT)
+    );
+  expected_postgresql: |
+    CREATE TABLE orders (
+      id INTEGER, region VARCHAR(20), total NUMERIC(10,2)
+    ) PARTITION BY LIST (region);
+    CREATE TABLE orders_p_east PARTITION OF orders FOR VALUES IN ('NY', 'NJ', 'CT');
+    CREATE TABLE orders_p_west PARTITION OF orders FOR VALUES IN ('CA', 'WA', 'OR');
+    CREATE TABLE orders_p_other PARTITION OF orders DEFAULT;
+  complexity: 5
+  constructs: ["PARTITION BY LIST", "DEFAULT"]
+
+- name: hash_partition
+  category: partitioning
+  oracle: |
+    CREATE TABLE events (
+      id NUMBER, event_type VARCHAR2(50)
+    ) PARTITION BY HASH (id) PARTITIONS 4;
+  expected_postgresql: |
+    CREATE TABLE events (
+      id INTEGER, event_type VARCHAR(50)
+    ) PARTITION BY HASH (id);
+    CREATE TABLE events_p0 PARTITION OF events FOR VALUES WITH (MODULUS 4, REMAINDER 0);
+    CREATE TABLE events_p1 PARTITION OF events FOR VALUES WITH (MODULUS 4, REMAINDER 1);
+    CREATE TABLE events_p2 PARTITION OF events FOR VALUES WITH (MODULUS 4, REMAINDER 2);
+    CREATE TABLE events_p3 PARTITION OF events FOR VALUES WITH (MODULUS 4, REMAINDER 3);
+  complexity: 4
+  constructs: ["PARTITION BY HASH"]
+
+- name: subpartition
+  category: partitioning
+  oracle: |
+    CREATE TABLE sales_detail (
+      id NUMBER, sale_date DATE, region VARCHAR2(20), amount NUMBER(10,2)
+    ) PARTITION BY RANGE (sale_date)
+    SUBPARTITION BY LIST (region) (
+      PARTITION p_2024 VALUES LESS THAN (TO_DATE('2025-01-01', 'YYYY-MM-DD')) (
+        SUBPARTITION p_2024_east VALUES ('EAST'),
+        SUBPARTITION p_2024_west VALUES ('WEST')
+      )
+    );
+  expected_postgresql: |
+    CREATE TABLE sales_detail (
+      id INTEGER, sale_date TIMESTAMP, region VARCHAR(20), amount NUMERIC(10,2)
+    ) PARTITION BY RANGE (sale_date);
+    CREATE TABLE sales_detail_p_2024 PARTITION OF sales_detail
+      FOR VALUES FROM (MINVALUE) TO ('2025-01-01') PARTITION BY LIST (region);
+    CREATE TABLE sales_detail_p_2024_east PARTITION OF sales_detail_p_2024
+      FOR VALUES IN ('EAST');
+    CREATE TABLE sales_detail_p_2024_west PARTITION OF sales_detail_p_2024
+      FOR VALUES IN ('WEST');
+  complexity: 8
+  constructs: ["PARTITION BY RANGE", "SUBPARTITION BY LIST"]
+
+- name: partition_add
+  category: partitioning
+  oracle: "ALTER TABLE sales ADD PARTITION p_2025 VALUES LESS THAN (TO_DATE('2026-01-01', 'YYYY-MM-DD'))"
+  expected_postgresql: "CREATE TABLE sales_p_2025 PARTITION OF sales FOR VALUES FROM ('2025-01-01') TO ('2026-01-01')"
+  complexity: 3
+  constructs: ["ALTER TABLE", "ADD PARTITION"]
+
+- name: partition_drop
+  category: partitioning
+  oracle: "ALTER TABLE sales DROP PARTITION p_2023"
+  expected_postgresql: "DROP TABLE IF EXISTS sales_p_2023"
+  complexity: 2
+  constructs: ["ALTER TABLE", "DROP PARTITION"]
+
+- name: interval_partition
+  category: partitioning
+  oracle: |
+    CREATE TABLE logs (
+      id NUMBER, log_date DATE, message VARCHAR2(4000)
+    ) PARTITION BY RANGE (log_date) INTERVAL (NUMTOYMINTERVAL(1, 'MONTH')) (
+      PARTITION p_init VALUES LESS THAN (TO_DATE('2024-01-01', 'YYYY-MM-DD'))
+    );
+  expected_postgresql: |
+    CREATE TABLE logs (
+      id INTEGER, log_date TIMESTAMP, message VARCHAR(4000)
+    ) PARTITION BY RANGE (log_date);
+    CREATE TABLE logs_p_init PARTITION OF logs FOR VALUES FROM (MINVALUE) TO ('2024-01-01');
+    -- NOTE: PostgreSQL does not support INTERVAL partitioning.
+    -- Use pg_partman extension or create partitions manually/via cron.
+  complexity: 6
+  constructs: ["PARTITION BY RANGE", "INTERVAL"]
+  tags: ["manual_review"]

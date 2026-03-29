@@ -1,0 +1,53 @@
+{
+  "commands": {
+    "scan": {
+      "help": "Oracle/PostgreSQL şemasını tara ve geçiş hazırlık raporu oluştur",
+      "scanning": "{file} taranıyor...",
+      "found_objects": "{count} nesne bulundu",
+      "complexity": "Karmaşıklık: {score}/10",
+      "complete": "Tarama {seconds}s içinde tamamlandı"
+    },
+    "convert": {
+      "help": "Oracle SQL/PL-SQL'i PostgreSQL'e dönüştür (veya tersine)",
+      "converting": "{count} nesne dönüştürülüyor...",
+      "rules_only": "Yalnızca kural modu kullanılıyor (%90 kapsam)",
+      "ai_required": "Yapay zeka destekli dönüştürme kayıt (ücretsiz) gerektirir.\nKayıt: stein auth register --email you@company.com\nVeya yalnızca kural modunu kullanın: stein convert myfile.sql",
+      "complete": "{converted}/{total} nesne dönüştürüldü",
+      "forwarded": "{count} nesne yapay zekaya iletildi"
+    },
+    "verify": {
+      "help": "Dönüştürülmüş PostgreSQL/Oracle çıktısının doğruluğunu kontrol et",
+      "verifying": "{count} dosya doğrulanıyor...",
+      "green": "YEŞİL — yüksek güven",
+      "yellow": "SARI — inceleme önerilir",
+      "red": "KIRMIZI — elle düzeltme gerekli"
+    },
+    "auth": {
+      "register_help": "Ücretsiz SteinDB hesabı oluştur",
+      "register_success": "Kayıt başarılı!",
+      "register_prompt": "E-posta adresi",
+      "login_help": "Mevcut bir token ile giriş yap",
+      "logout_help": "Kayıtlı token'ı kaldır",
+      "logout_success": "Çıkış yapıldı. Yalnızca kural modu token olmadan da çalışmaya devam eder.",
+      "status_help": "Mevcut kimlik doğrulama durumunu göster",
+      "status_authenticated": "Kimliği doğrulanmış",
+      "status_not_authenticated": "Kimliği doğrulanmamış",
+      "upgrade_help": "Hesabınızı ücretli bir plana yükseltin"
+    }
+  },
+  "errors": {
+    "file_not_found": "Dosya bulunamadı: {path}",
+    "invalid_sql": "Geçersiz SQL girişi",
+    "connection_failed": "Bağlantı başarısız: {error}",
+    "no_objects": "Girişte nesne bulunamadı"
+  },
+  "report": {
+    "title": "SteinDB Geçiş Raporu",
+    "summary": "Özet",
+    "total_objects": "Toplam Nesne",
+    "auto_convertible": "Otomatik dönüştürülebilir",
+    "needs_ai": "Yapay zeka desteği gerekli",
+    "complexity_avg": "Ortalama Karmaşıklık",
+    "savings_estimate": "Tahmini Tasarruf"
+  }
+}

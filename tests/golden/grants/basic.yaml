@@ -1,0 +1,47 @@
+- name: grant_select
+  category: grants
+  oracle: "GRANT SELECT ON hr.employees TO app_user"
+  expected_postgresql: "GRANT SELECT ON hr.employees TO app_user"
+  constructs: ["GRANT"]
+  tags: ["no_change"]
+
+- name: grant_all
+  category: grants
+  oracle: "GRANT ALL PRIVILEGES ON hr.employees TO admin_user"
+  expected_postgresql: "GRANT ALL PRIVILEGES ON hr.employees TO admin_user"
+  constructs: ["GRANT", "ALL PRIVILEGES"]
+  tags: ["no_change"]
+
+- name: grant_execute
+  category: grants
+  oracle: "GRANT EXECUTE ON hr.calculate_bonus TO app_user"
+  expected_postgresql: "GRANT EXECUTE ON FUNCTION hr.calculate_bonus TO app_user"
+  constructs: ["GRANT", "EXECUTE"]
+
+- name: revoke_select
+  category: grants
+  oracle: "REVOKE SELECT ON hr.employees FROM app_user"
+  expected_postgresql: "REVOKE SELECT ON hr.employees FROM app_user"
+  constructs: ["REVOKE"]
+  tags: ["no_change"]
+
+- name: grant_role
+  category: grants
+  oracle: "GRANT hr_readonly TO app_user"
+  expected_postgresql: "GRANT hr_readonly TO app_user"
+  constructs: ["GRANT", "ROLE"]
+  tags: ["no_change"]
+
+- name: create_role
+  category: grants
+  oracle: "CREATE ROLE hr_readonly"
+  expected_postgresql: "CREATE ROLE hr_readonly"
+  constructs: ["CREATE ROLE"]
+  tags: ["no_change"]
+
+- name: grant_with_admin
+  category: grants
+  oracle: "GRANT hr_admin TO manager_user WITH ADMIN OPTION"
+  expected_postgresql: "GRANT hr_admin TO manager_user WITH ADMIN OPTION"
+  constructs: ["GRANT", "WITH ADMIN OPTION"]
+  tags: ["no_change"]

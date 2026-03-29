@@ -1,0 +1,297 @@
+# =============================================================================
+# SteinDB Golden Tests — P2O DDL Conversions
+# PostgreSQL DDL statements → Oracle DDL equivalents
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# CREATE TABLE
+# ---------------------------------------------------------------------------
+
+- name: create_table_pg_types_to_oracle
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: >-
+    CREATE TABLE employees (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      salary NUMERIC(12,2),
+      is_active BOOLEAN DEFAULT TRUE,
+      bio TEXT,
+      hired_at TIMESTAMP DEFAULT NOW()
+    )
+  expected: >-
+    CREATE TABLE employees (
+      id NUMBER(10) NOT NULL PRIMARY KEY,
+      name VARCHAR2(100) NOT NULL,
+      salary NUMBER(12,2),
+      is_active NUMBER(1) DEFAULT 1,
+      bio CLOB,
+      hired_at TIMESTAMP DEFAULT SYSDATE
+    );
+    CREATE SEQUENCE employees_id_seq START WITH 1;
+    CREATE OR REPLACE TRIGGER employees_id_trg BEFORE INSERT ON employees
+    FOR EACH ROW BEGIN :NEW.id := employees_id_seq.NEXTVAL; END;
+  constructs: ["CREATE TABLE", "SERIAL", "BOOLEAN", "TEXT", "NOW"]
+  tags: ["ddl", "p2o"]
+
+- name: create_temp_table_to_global_temporary
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: "CREATE TEMP TABLE session_data (key VARCHAR(50), value TEXT)"
+  expected: >-
+    CREATE GLOBAL TEMPORARY TABLE session_data (
+      key VARCHAR2(50), value CLOB
+    ) ON COMMIT PRESERVE ROWS
+  constructs: ["TEMP TABLE"]
+  tags: ["ddl", "temporary", "p2o"]
+  acceptance_criteria:
+    - "PG TEMP TABLE is session-scoped and auto-dropped"
+    - "Oracle GLOBAL TEMPORARY TABLE persists definition but not data"
+    - "ON COMMIT PRESERVE ROWS keeps data for session duration"
+
+- name: create_unlogged_table_to_table
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: "CREATE UNLOGGED TABLE staging (id INTEGER, data TEXT)"
+  expected: >-
+    /* WARNING: UNLOGGED not supported in Oracle; table will be fully logged */
+    CREATE TABLE staging (id NUMBER(10), data CLOB)
+  constructs: ["UNLOGGED"]
+  tags: ["ddl", "lossy", "p2o"]
+  acceptance_criteria:
+    - "PG UNLOGGED tables skip WAL for speed"
+    - "Oracle has no direct equivalent; NOLOGGING on operations is closest"
+
+# ---------------------------------------------------------------------------
+# IDENTITY COLUMNS
+# ---------------------------------------------------------------------------
+
+- name: generated_always_identity_to_sequence
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: "CREATE TABLE t (id INTEGER GENERATED ALWAYS AS IDENTITY, name VARCHAR(100))"
+  expected: >-
+    CREATE TABLE t (id NUMBER(10) NOT NULL, name VARCHAR2(100));
+    CREATE SEQUENCE t_id_seq START WITH 1;
+    CREATE OR REPLACE TRIGGER t_id_trg BEFORE INSERT ON t
+    FOR EACH ROW BEGIN :NEW.id := t_id_seq.NEXTVAL; END;
+  constructs: ["GENERATED ALWAYS AS IDENTITY"]
+  tags: ["ddl", "identity", "p2o"]
+
+# ---------------------------------------------------------------------------
+# ALTER TABLE
+# ---------------------------------------------------------------------------
+
+- name: add_column_to_add_parens
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: "ALTER TABLE users ADD COLUMN email VARCHAR(255)"
+  expected: "ALTER TABLE users ADD (email VARCHAR2(255))"
+  constructs: ["ADD COLUMN"]
+  tags: ["ddl", "alter", "p2o"]
+
+- name: alter_column_type_to_modify
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: "ALTER TABLE users ALTER COLUMN name TYPE VARCHAR(200)"
+  expected: "ALTER TABLE users MODIFY (name VARCHAR2(200))"
+  constructs: ["ALTER COLUMN TYPE"]
+  tags: ["ddl", "alter", "p2o"]
+
+- name: if_not_exists_removal
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: "CREATE TABLE IF NOT EXISTS logs (id SERIAL PRIMARY KEY, msg TEXT)"
+  expected: >-
+    CREATE TABLE logs (id NUMBER(10) NOT NULL PRIMARY KEY, msg CLOB);
+    CREATE SEQUENCE logs_id_seq START WITH 1;
+    CREATE OR REPLACE TRIGGER logs_id_trg BEFORE INSERT ON logs
+    FOR EACH ROW BEGIN :NEW.id := logs_id_seq.NEXTVAL; END;
+  constructs: ["IF NOT EXISTS"]
+  tags: ["ddl", "p2o"]
+  acceptance_criteria:
+    - "Oracle does not support IF NOT EXISTS on CREATE TABLE"
+    - "Must use PL/SQL block with EXECUTE IMMEDIATE and exception handling for idempotent DDL"
+
+# ---------------------------------------------------------------------------
+# SEQUENCE REFERENCES
+# ---------------------------------------------------------------------------
+
+- name: nextval_to_dot_nextval
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: "INSERT INTO orders (id, name) VALUES (nextval('order_seq'), 'Test')"
+  expected: "INSERT INTO orders (id, name) VALUES (order_seq.NEXTVAL, 'Test')"
+  constructs: ["nextval"]
+  tags: ["ddl", "sequence", "p2o"]
+
+- name: currval_to_dot_currval
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: "SELECT currval('order_seq')"
+  expected: "SELECT order_seq.CURRVAL FROM DUAL"
+  constructs: ["currval"]
+  tags: ["ddl", "sequence", "p2o"]
+
+# ---------------------------------------------------------------------------
+# INDEX TYPES
+# ---------------------------------------------------------------------------
+
+- name: create_index_concurrently_removal
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: "CREATE INDEX CONCURRENTLY idx_email ON users (email)"
+  expected: "CREATE INDEX idx_email ON users (email)"
+  constructs: ["CONCURRENTLY"]
+  tags: ["ddl", "index", "p2o"]
+  acceptance_criteria:
+    - "PG CONCURRENTLY avoids table locks during index build"
+    - "Oracle CREATE INDEX ONLINE is the closest equivalent"
+
+- name: partial_index_to_function_based
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: "CREATE INDEX idx_active ON users (email) WHERE is_active = true"
+  expected: >-
+    CREATE INDEX idx_active ON users (
+      CASE WHEN is_active = 1 THEN email END
+    )
+  constructs: ["PARTIAL INDEX"]
+  tags: ["ddl", "index", "p2o"]
+  acceptance_criteria:
+    - "PG partial indexes filter rows with WHERE clause"
+    - "Oracle uses function-based index with CASE expression"
+
+- name: gin_index_to_btree
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: "CREATE INDEX idx_tags ON posts USING GIN (tags)"
+  expected: >-
+    /* WARNING: GIN index has no Oracle equivalent; using basic index */
+    CREATE INDEX idx_tags ON posts (tags)
+  constructs: ["GIN"]
+  tags: ["ddl", "index", "lossy", "p2o"]
+
+# ---------------------------------------------------------------------------
+# CONSTRAINTS / COMMENTS / VIEWS
+# ---------------------------------------------------------------------------
+
+- name: on_delete_cascade_same
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: >-
+    ALTER TABLE orders ADD CONSTRAINT fk_customer
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+  expected: >-
+    ALTER TABLE orders ADD CONSTRAINT fk_customer
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+  constructs: ["ON DELETE CASCADE"]
+  tags: ["ddl", "constraint", "p2o"]
+
+- name: comment_on_same
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: "COMMENT ON TABLE employees IS 'Employee master table'"
+  expected: "COMMENT ON TABLE employees IS 'Employee master table'"
+  constructs: ["COMMENT ON"]
+  tags: ["ddl", "comment", "p2o"]
+
+- name: create_view_type_differences
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: >-
+    CREATE VIEW active_users AS
+    SELECT id, name, email FROM users WHERE is_active
+  expected: >-
+    CREATE VIEW active_users AS
+    SELECT id, name, email FROM users WHERE is_active = 1
+  constructs: ["CREATE VIEW", "BOOLEAN"]
+  tags: ["ddl", "view", "p2o"]
+
+# ---------------------------------------------------------------------------
+# ADDITIONAL DDL CONVERSIONS
+# ---------------------------------------------------------------------------
+
+- name: create_schema_to_create_user
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: "CREATE SCHEMA IF NOT EXISTS analytics"
+  expected: >-
+    /* WARNING: PG schema maps to Oracle schema (user-owned) */
+    CREATE USER analytics IDENTIFIED BY temp_password;
+    GRANT CREATE SESSION TO analytics
+  constructs: ["CREATE SCHEMA"]
+  tags: ["ddl", "schema", "p2o"]
+  acceptance_criteria:
+    - "PG schemas are namespaces within a database"
+    - "Oracle schemas are tied to users"
+
+- name: alter_table_set_default
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: "ALTER TABLE orders ALTER COLUMN status SET DEFAULT 'pending'"
+  expected: "ALTER TABLE orders MODIFY (status DEFAULT 'pending')"
+  constructs: ["SET DEFAULT"]
+  tags: ["ddl", "alter", "p2o"]
+
+- name: alter_table_drop_default
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: "ALTER TABLE orders ALTER COLUMN status DROP DEFAULT"
+  expected: "ALTER TABLE orders MODIFY (status DEFAULT NULL)"
+  constructs: ["DROP DEFAULT"]
+  tags: ["ddl", "alter", "p2o"]
+
+- name: alter_table_set_not_null
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: "ALTER TABLE users ALTER COLUMN email SET NOT NULL"
+  expected: "ALTER TABLE users MODIFY (email NOT NULL)"
+  constructs: ["SET NOT NULL"]
+  tags: ["ddl", "alter", "p2o"]
+
+- name: drop_table_cascade
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: "DROP TABLE IF EXISTS old_data CASCADE"
+  expected: "DROP TABLE old_data CASCADE CONSTRAINTS"
+  constructs: ["DROP TABLE", "CASCADE"]
+  tags: ["ddl", "drop", "p2o"]
+  acceptance_criteria:
+    - "PG CASCADE drops dependent objects"
+    - "Oracle CASCADE CONSTRAINTS only drops FK constraints, not dependent views"
+
+- name: create_sequence_owned_by
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: >-
+    CREATE SEQUENCE order_seq START WITH 1000 INCREMENT BY 1;
+    ALTER SEQUENCE order_seq OWNED BY orders.id
+  expected: >-
+    CREATE SEQUENCE order_seq START WITH 1000 INCREMENT BY 1
+  constructs: ["CREATE SEQUENCE", "OWNED BY"]
+  tags: ["ddl", "sequence", "p2o"]
+  acceptance_criteria:
+    - "PG OWNED BY ties sequence lifecycle to a column"
+    - "Oracle has no equivalent; sequence exists independently"
+
+- name: create_extension_removal
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: "CREATE EXTENSION IF NOT EXISTS pgcrypto"
+  expected: >-
+    /* WARNING: PG extension pgcrypto has no Oracle equivalent; functionality provided by DBMS_CRYPTO */
+  constructs: ["CREATE EXTENSION"]
+  tags: ["ddl", "extension", "p2o"]
+
+- name: exclusion_constraint_to_trigger
+  category: p2o_ddl
+  direction: pg_to_oracle
+  source: >-
+    ALTER TABLE meetings ADD CONSTRAINT no_overlap
+    EXCLUDE USING GIST (room_id WITH =, time_range WITH &&)
+  expected: >-
+    /* WARNING: PG EXCLUDE constraint requires trigger-based enforcement in Oracle */
+    /* Create BEFORE INSERT OR UPDATE trigger to check for overlapping time ranges */
+  constructs: ["EXCLUDE"]
+  tags: ["ddl", "constraint", "lossy", "p2o"]

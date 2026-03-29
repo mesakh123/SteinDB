@@ -1,0 +1,77 @@
+# Golden tests: Oracle string functions → PostgreSQL equivalents
+
+- name: substr_to_substring
+  category: functions
+  oracle: "SELECT SUBSTR(first_name, 2, 5) FROM employees"
+  expected_postgresql: "SELECT SUBSTRING(first_name FROM 2 FOR 5) FROM employees"
+  constructs: ["SUBSTR"]
+
+- name: instr_to_position
+  category: functions
+  oracle: "SELECT INSTR(email, '@') FROM employees"
+  expected_postgresql: "SELECT POSITION('@' IN email) FROM employees"
+  constructs: ["INSTR"]
+
+- name: replace_function
+  category: functions
+  oracle: "SELECT REPLACE(name, 'old', 'new') FROM employees"
+  expected_postgresql: "SELECT REPLACE(name, 'old', 'new') FROM employees"
+  constructs: ["REPLACE"]
+  tags: ["no_change"]
+
+- name: upper_lower
+  category: functions
+  oracle: "SELECT UPPER(first_name), LOWER(last_name) FROM employees"
+  expected_postgresql: "SELECT UPPER(first_name), LOWER(last_name) FROM employees"
+  constructs: ["UPPER", "LOWER"]
+  tags: ["no_change"]
+
+- name: trim_ltrim_rtrim
+  category: functions
+  oracle: "SELECT TRIM(name), LTRIM(name, ' '), RTRIM(name, ' ') FROM employees"
+  expected_postgresql: "SELECT TRIM(name), LTRIM(name, ' '), RTRIM(name, ' ') FROM employees"
+  constructs: ["TRIM", "LTRIM", "RTRIM"]
+  tags: ["no_change"]
+
+- name: lpad_rpad
+  category: functions
+  oracle: "SELECT LPAD(employee_id, 10, '0'), RPAD(name, 30, '.') FROM employees"
+  expected_postgresql: "SELECT LPAD(employee_id::TEXT, 10, '0'), RPAD(name, 30, '.') FROM employees"
+  constructs: ["LPAD", "RPAD"]
+
+- name: length_lengthb
+  category: functions
+  oracle: "SELECT LENGTH(name), LENGTHB(name) FROM employees"
+  expected_postgresql: "SELECT LENGTH(name), OCTET_LENGTH(name) FROM employees"
+  constructs: ["LENGTH", "LENGTHB"]
+
+- name: regexp_substr_to_substring
+  category: functions
+  oracle: "SELECT REGEXP_SUBSTR(email, '[^@]+') FROM employees"
+  expected_postgresql: "SELECT SUBSTRING(email FROM '[^@]+') FROM employees"
+  constructs: ["REGEXP_SUBSTR"]
+
+- name: regexp_replace_flags
+  category: functions
+  oracle: "SELECT REGEXP_REPLACE(name, '[0-9]', '', 1, 0) FROM employees"
+  expected_postgresql: "SELECT REGEXP_REPLACE(name, '[0-9]', '', 'g') FROM employees"
+  constructs: ["REGEXP_REPLACE"]
+
+- name: regexp_like_to_tilde
+  category: functions
+  oracle: "SELECT * FROM employees WHERE REGEXP_LIKE(email, '^[A-Z]', 'i')"
+  expected_postgresql: "SELECT * FROM employees WHERE email ~* '^[A-Z]'"
+  constructs: ["REGEXP_LIKE"]
+
+- name: listagg_to_string_agg
+  category: functions
+  oracle: "SELECT department_id, LISTAGG(name, ',') WITHIN GROUP (ORDER BY name) FROM employees GROUP BY department_id"
+  expected_postgresql: "SELECT department_id, STRING_AGG(name, ',' ORDER BY name) FROM employees GROUP BY department_id"
+  constructs: ["LISTAGG"]
+
+- name: concat_function
+  category: functions
+  oracle: "SELECT CONCAT(first_name, last_name) FROM employees"
+  expected_postgresql: "SELECT CONCAT(first_name, last_name) FROM employees"
+  constructs: ["CONCAT"]
+  tags: ["no_change"]

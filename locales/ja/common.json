@@ -1,0 +1,58 @@
+{
+  "app_name": "SteinDB",
+  "tagline": "唯一の双方向Oracle ↔ PostgreSQL移行ツール",
+  "directions": {
+    "o2p": "OracleからPostgreSQLへ",
+    "p2o": "PostgreSQLからOracleへ"
+  },
+  "tiers": {
+    "free": "無料",
+    "registered": "登録済み",
+    "solo": "ソロ",
+    "team": "チーム",
+    "enterprise": "エンタープライズ"
+  },
+  "roles": {
+    "owner": "オーナー",
+    "admin": "管理者",
+    "member": "メンバー",
+    "viewer": "閲覧者"
+  },
+  "actions": {
+    "save": "保存",
+    "cancel": "キャンセル",
+    "delete": "削除",
+    "edit": "編集",
+    "create": "作成",
+    "search": "検索",
+    "filter": "フィルター",
+    "export": "エクスポート",
+    "download": "ダウンロード",
+    "copy": "コピー",
+    "copied": "コピーしました！",
+    "loading": "読み込み中...",
+    "submit": "送信",
+    "confirm": "確認",
+    "back": "戻る",
+    "next": "次へ",
+    "upgrade": "アップグレード",
+    "register": "登録",
+    "login": "ログイン",
+    "logout": "ログアウト"
+  },
+  "status": {
+    "active": "有効",
+    "inactive": "無効",
+    "success": "成功",
+    "failed": "失敗",
+    "partial": "一部完了",
+    "pending": "保留中"
+  },
+  "time": {
+    "just_now": "たった今",
+    "minutes_ago": "{n}分前",
+    "hours_ago": "{n}時間前",
+    "days_ago": "{n}日前",
+    "yesterday": "昨日"
+  }
+}

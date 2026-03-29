@@ -1,0 +1,132 @@
+# =============================================================================
+# SteinDB Golden Tests — Architecture, Scaling & Performance Edge Cases
+# From issues.md Section 6: Connection pooling, hints, indexes
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# CONNECTION POOLING WARNING (>500 connections)
+# ---------------------------------------------------------------------------
+
+- name: connection_pooling_warning
+  category: edge_cases
+  oracle: >-
+    ALTER SYSTEM SET PROCESSES = 1000 SCOPE = SPFILE
+  expected_postgresql: >-
+    ALTER SYSTEM SET max_connections = 200
+  complexity: 5
+  constructs: ["ALTER_SYSTEM", "CONNECTION_POOLING"]
+  tags: ["performance", "connection_pooling", "section6"]
+  acceptance_criteria:
+    - "WARNING: PG forks a heavy OS process per connection"
+    - "Direct connections >500 will exhaust memory and thrash CPU"
+    - "MUST implement PgBouncer or Odyssey in front of PostgreSQL"
+    - "Oracle uses efficient threaded model; PG does not"
+
+# ---------------------------------------------------------------------------
+# OPTIMIZER HINTS REMOVAL
+# ---------------------------------------------------------------------------
+
+- name: optimizer_hint_index_removal
+  category: edge_cases
+  oracle: "SELECT /*+ INDEX(t1 idx_name) */ * FROM orders t1 WHERE status = 'ACTIVE'"
+  expected_postgresql: "SELECT * FROM orders t1 WHERE status = 'ACTIVE'"
+  complexity: 3
+  constructs: ["OPTIMIZER_HINT", "INDEX_HINT"]
+  tags: ["performance", "hints", "section6"]
+  acceptance_criteria:
+    - "WARNING: PostgreSQL natively ignores all optimizer hints"
+    - "Hint /*+ INDEX(t1 idx_name) */ removed from converted SQL"
+    - "If plan stabilization needed, install pg_hint_plan extension"
+
+- name: optimizer_hint_full_scan_removal
+  category: edge_cases
+  oracle: "SELECT /*+ FULL(emp) */ employee_id, name FROM employees emp"
+  expected_postgresql: "SELECT employee_id, name FROM employees emp"
+  complexity: 3
+  constructs: ["OPTIMIZER_HINT", "FULL_HINT"]
+  tags: ["performance", "hints", "section6"]
+  acceptance_criteria:
+    - "WARNING: /*+ FULL(emp) */ hint removed — PG planner decides scan type"
+    - "Use pg_hint_plan extension if explicit plan control is required"
+
+- name: optimizer_hint_parallel
+  category: edge_cases
+  oracle: "SELECT /*+ PARALLEL(t, 4) */ COUNT(*) FROM large_table t"
+  expected_postgresql: "SELECT COUNT(*) FROM large_table t"
+  complexity: 3
+  constructs: ["OPTIMIZER_HINT", "PARALLEL_HINT"]
+  tags: ["performance", "hints", "section6"]
+  acceptance_criteria:
+    - "WARNING: PARALLEL hint removed — use max_parallel_workers_per_gather GUC"
+
+# ---------------------------------------------------------------------------
+# BITMAP INDEX → B-TREE WITH WARNING
+# ---------------------------------------------------------------------------
+
+- name: bitmap_index_to_btree
+  category: edge_cases
+  oracle: "CREATE BITMAP INDEX idx_status ON orders (status)"
+  expected_postgresql: "CREATE INDEX idx_status ON orders (status)"
+  complexity: 4
+  constructs: ["BITMAP_INDEX", "CREATE_INDEX"]
+  tags: ["performance", "indexes", "section6"]
+  acceptance_criteria:
+    - "WARNING: PG does not have physical bitmap indexes"
+    - "Mapped to standard B-tree index"
+    - "For low-cardinality columns, consider BRIN index instead"
+    - "PG dynamically creates bitmap scans at query time"
+
+# ---------------------------------------------------------------------------
+# INDEX ORGANIZED TABLE → CLUSTER SUGGESTION
+# ---------------------------------------------------------------------------
+
+- name: index_organized_table_to_cluster
+  category: edge_cases
+  oracle: >-
+    CREATE TABLE lookup_codes (
+      code_type VARCHAR2(30),
+      code_value VARCHAR2(30),
+      description VARCHAR2(200),
+      CONSTRAINT pk_lookup PRIMARY KEY (code_type, code_value)
+    ) ORGANIZATION INDEX
+  expected_postgresql: >-
+    CREATE TABLE lookup_codes (
+      code_type VARCHAR(30),
+      code_value VARCHAR(30),
+      description VARCHAR(200),
+      CONSTRAINT pk_lookup PRIMARY KEY (code_type, code_value)
+    )
+  complexity: 5
+  constructs: ["INDEX_ORGANIZED_TABLE", "VARCHAR2"]
+  tags: ["performance", "iot", "section6"]
+  acceptance_criteria:
+    - "WARNING: ORGANIZATION INDEX removed — PG has no persistent IOT equivalent"
+    - "Consider CLUSTER lookup_codes USING pk_lookup for one-time reordering"
+    - "CLUSTER is not maintained automatically — must re-run after bulk changes"
+
+# ---------------------------------------------------------------------------
+# FUNCTION-BASED INDEX
+# ---------------------------------------------------------------------------
+
+- name: function_based_index
+  category: edge_cases
+  oracle: "CREATE INDEX idx_upper_name ON employees (UPPER(last_name))"
+  expected_postgresql: "CREATE INDEX idx_upper_name ON employees (UPPER(last_name))"
+  complexity: 2
+  constructs: ["FUNCTION_BASED_INDEX"]
+  tags: ["performance", "indexes", "section6"]
+  acceptance_criteria:
+    - "Function-based indexes are supported in both Oracle and PG"
+    - "PG calls these expression indexes — syntax is identical"
+
+- name: reverse_key_index_warning
+  category: edge_cases
+  oracle: "CREATE INDEX idx_rev_id ON orders (order_id) REVERSE"
+  expected_postgresql: "CREATE INDEX idx_rev_id ON orders (order_id)"
+  complexity: 3
+  constructs: ["REVERSE_KEY_INDEX"]
+  tags: ["performance", "indexes", "section6"]
+  acceptance_criteria:
+    - "WARNING: REVERSE keyword removed — PG has no reverse key index"
+    - "Oracle reverse key indexes reduce contention on monotonic inserts"
+    - "In PG, consider HASH index or partitioning for similar benefit"
