@@ -72,16 +72,15 @@ class LimitToFetchFirstRule(Rule):
 # 2. EXCEPT -> MINUS
 # ---------------------------------------------------------------------------
 
-_EXCEPT_RE = re.compile(r"\bEXCEPT\b", re.IGNORECASE)
-# Avoid matching EXCEPTION (PL/pgSQL keyword)
-_EXCEPT_ONLY_RE = re.compile(r"\bEXCEPT\b(?!ION)", re.IGNORECASE)
+# Avoid matching EXCEPTION; also strip optional ALL (Oracle has no MINUS ALL)
+_EXCEPT_ONLY_RE = re.compile(r"\bEXCEPT\b(?!ION)(\s+ALL\b)?", re.IGNORECASE)
 
 
 class ExceptToMinusRule(Rule):
     name = "except_to_minus"
     category = RuleCategory.P2O_SYNTAX_MISC
     priority = 20
-    description = "EXCEPT -> MINUS"
+    description = "EXCEPT [ALL] -> MINUS (Oracle has no MINUS ALL)"
 
     def matches(self, sql: str) -> bool:
         return _matches_outside_strings(_EXCEPT_ONLY_RE, sql)

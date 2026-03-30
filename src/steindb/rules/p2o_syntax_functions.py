@@ -315,3 +315,45 @@ class EncodeHexToRawtohexRule(Rule):
             lambda m: f"RAWTOHEX({m.group(1).strip()})",
             sql,
         )
+
+
+# ---------------------------------------------------------------------------
+# 9. gen_random_uuid() -> SYS_GUID()
+# ---------------------------------------------------------------------------
+
+_GEN_RANDOM_UUID_RE = re.compile(r"\bgen_random_uuid\s*\(\s*\)", re.IGNORECASE)
+
+
+class GenRandomUuidToSysGuidRule(Rule):
+    name = "gen_random_uuid_to_sys_guid"
+    category = RuleCategory.P2O_SYNTAX_FUNCTIONS
+    priority = 90
+    description = "gen_random_uuid() -> SYS_GUID()"
+
+    def matches(self, sql: str) -> bool:
+        return _matches_outside_strings(_GEN_RANDOM_UUID_RE, sql)
+
+    def apply(self, sql: str) -> str:
+        return _replace_outside_strings(_GEN_RANDOM_UUID_RE, "SYS_GUID()", sql)
+
+
+# ---------------------------------------------------------------------------
+# 10. Boolean literals: true -> 1, false -> 0
+# ---------------------------------------------------------------------------
+
+_TRUE_RE = re.compile(r"\btrue\b", re.IGNORECASE)
+_FALSE_RE = re.compile(r"\bfalse\b", re.IGNORECASE)
+
+
+class BooleanLiteralRule(Rule):
+    name = "boolean_literals_to_numeric"
+    category = RuleCategory.P2O_SYNTAX_FUNCTIONS
+    priority = 95
+    description = "true -> 1, false -> 0 (Oracle has no BOOLEAN type in SQL)"
+
+    def matches(self, sql: str) -> bool:
+        return _matches_outside_strings(_TRUE_RE, sql) or _matches_outside_strings(_FALSE_RE, sql)
+
+    def apply(self, sql: str) -> str:
+        result = _replace_outside_strings(_TRUE_RE, "1", sql)
+        return _replace_outside_strings(_FALSE_RE, "0", result)

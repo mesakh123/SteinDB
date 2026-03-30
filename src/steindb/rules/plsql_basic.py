@@ -131,6 +131,24 @@ class ExecuteImmediateRule(Rule):
         return self._PATTERN.sub("EXECUTE", sql)
 
 
+class BindVariableRule(Rule):
+    """Convert Oracle bind variables :1, :2 etc. to PostgreSQL $1, $2 in EXECUTE strings."""
+
+    name = "bind_variable_to_dollar"
+    category = RuleCategory.PLSQL_BASIC
+    priority = 55
+    description = "Convert :N bind variables to $N in dynamic SQL strings"
+
+    _BIND_RE = re.compile(r":(\d+)")
+
+    def matches(self, sql: str) -> bool:
+        upper = sql.upper()
+        return "EXECUTE" in upper and bool(self._BIND_RE.search(sql))
+
+    def apply(self, sql: str) -> str:
+        return self._BIND_RE.sub(r"$\1", sql)
+
+
 class PLSIntegerRule(Rule):
     """PLS_INTEGER -> INTEGER, BINARY_INTEGER -> INTEGER."""
 
