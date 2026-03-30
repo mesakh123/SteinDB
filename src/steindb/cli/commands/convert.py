@@ -209,7 +209,12 @@ def convert_command(
         out_file = output / f"{conv.name}.sql"
         out_file.write_text(conv.target_sql, encoding="utf-8")
 
-    # Write forwarded objects as a JSON manifest
+    # Write forwarded objects as SQL files (with LLM_FORWARD comment) + JSON manifest
+    for fwd in forwarded_list:
+        out_file = output / f"{fwd.name}.sql"
+        comment = f"/* LLM_FORWARD: {fwd.forward_reason or 'requires AI conversion'} */\n"
+        out_file.write_text(comment + fwd.source_sql, encoding="utf-8")
+
     if forwarded_list:
         forwarded_manifest = output / "forwarded.json"
         forwarded_data = [f.model_dump() for f in forwarded_list]
