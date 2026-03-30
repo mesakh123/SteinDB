@@ -169,7 +169,7 @@ class TestOnConflictToMergeRule:
             "ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name"
         )
         result = self.rule.apply(sql)
-        assert "src.name" in result
+        assert "s.name" in result
         assert "EXCLUDED" not in result
 
     def test_apply_structure(self) -> None:
@@ -178,9 +178,9 @@ class TestOnConflictToMergeRule:
             "ON CONFLICT (id) DO UPDATE SET val = EXCLUDED.val"
         )
         result = self.rule.apply(sql)
-        assert "MERGE INTO t tgt" in result
+        assert "MERGE INTO t t " in result
         assert "FROM DUAL" in result
-        assert "ON (tgt.id = src.id)" in result
+        assert "ON (t.id = s.id)" in result
 
     def test_apply_no_regex_match_returns_unchanged(self) -> None:
         """Line 213: apply() called on SQL that _ON_CONFLICT_RE.search doesn't match.

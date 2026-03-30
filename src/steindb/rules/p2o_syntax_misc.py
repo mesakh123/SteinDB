@@ -217,12 +217,18 @@ class OnConflictToMergeRule(Rule):
         conflict_col = m.group(4).strip()
         update_set = m.group(5).strip().rstrip(";")
 
-        # Replace EXCLUDED.col references with src.col in the update set
+        # Replace EXCLUDED.col references with s.col in the update set
         update_set_oracle = re.sub(
             r"\bEXCLUDED\.(\w+)",
-            r"src.\1",
+            r"s.\1",
             update_set,
             flags=re.IGNORECASE,
+        )
+        # Prefix unqualified column refs in SET with t.
+        update_set_oracle = re.sub(
+            r"(\b\w+)\s*=\s*s\.",
+            r"t.\1 = s.",
+            update_set_oracle,
         )
 
         # Build column list for the source
@@ -233,11 +239,13 @@ class OnConflictToMergeRule(Rule):
         select_parts = [f"{v} AS {c}" for c, v in zip(col_list, val_list, strict=False)]
         using_select = ", ".join(select_parts)
 
+        # Use s.col references in NOT MATCHED for consistency
+        not_matched_vals = ", ".join(f"s.{c}" for c in col_list)
+
         result = (
-            f"MERGE INTO {target} tgt\n"
-            f"USING (SELECT {using_select} FROM DUAL) src\n"
-            f"ON (tgt.{conflict_col} = src.{conflict_col})\n"
+            f"MERGE INTO {target} t USING (SELECT {using_select} FROM DUAL) s\n"
+            f"ON (t.{conflict_col} = s.{conflict_col})\n"
             f"WHEN MATCHED THEN UPDATE SET {update_set_oracle}\n"
-            f"WHEN NOT MATCHED THEN INSERT ({cols}) VALUES ({vals})"
+            f"WHEN NOT MATCHED THEN INSERT ({cols}) VALUES ({not_matched_vals})"
         )
         return result
