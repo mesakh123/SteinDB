@@ -95,8 +95,8 @@ class TestRuleRegistry:
         registry = RuleRegistry()
         registry.register(FakeRule())  # upper first (priority 10)
         registry.register(FakeLowerRule())  # lower second (priority 20)
-        result, applied = registry.apply_category(RuleCategory.SYNTAX_FUNCTIONS, "Hello")
-        assert result == "hello"
+        result, applied = registry.apply_category(RuleCategory.SYNTAX_FUNCTIONS, "NVL(Hello)")
+        assert result == "nvl(hello)"
         assert len(applied) == 2
 
     def test_empty_category_returns_empty(self) -> None:

@@ -113,6 +113,11 @@ class RuleRegistry:
         Returns:
             A tuple of (transformed_sql, list_of_applied_rule_names).
         """
+        from steindb.rules.speed import should_skip_category
+
+        if should_skip_category(category, sql.upper()):
+            return sql, []
+
         applied: list[str] = []
         result = sql
         for rule in self.get_rules(category):
