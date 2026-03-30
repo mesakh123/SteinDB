@@ -149,7 +149,14 @@ class DECODERule(Rule):
             parts.append("END")
             return " ".join(parts)
 
-        return _replace_outside_strings(_DECODE_RE, _repl, sql)
+        # Loop to handle nested DECODE (inner DECODE must be resolved first)
+        result = sql
+        for _ in range(10):  # safety limit
+            new_result = _replace_outside_strings(_DECODE_RE, _repl, result)
+            if new_result == result:
+                break
+            result = new_result
+        return result
 
 
 def _decode_with_null(expr: str, pairs: list[str]) -> str:
