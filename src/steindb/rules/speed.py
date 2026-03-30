@@ -62,6 +62,7 @@ CATEGORY_KEYWORDS: dict[RuleCategory, frozenset[str]] = {
             "RAW",
             "LONG",
             "BFILE",
+            "SDO_GEOMETRY",
         }
     ),
     RuleCategory.DATATYPES_NUMERIC: frozenset(
@@ -98,6 +99,7 @@ CATEGORY_KEYWORDS: dict[RuleCategory, frozenset[str]] = {
             "TO_NUMBER",
             "WM_CONCAT",
             "RATIO_TO_REPORT",
+            "SYS_GUID",
         }
     ),
     RuleCategory.SYNTAX_DATETIME: frozenset(

@@ -382,6 +382,105 @@ class RAWTOHEXRule(Rule):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# 12. HEXTORAW → DECODE ... 'hex'
+# ---------------------------------------------------------------------------
+
+_HEXTORAW_RE = re.compile(r"\bHEXTORAW\s*" + _BALANCED_PARENS, re.IGNORECASE)
+
+
+class HEXTORAWRule(Rule):
+    name = "hextoraw_to_decode"
+    category = RuleCategory.SYNTAX_FUNCTIONS
+    priority = 115
+    description = "HEXTORAW(x) -> DECODE(x, 'hex')"
+
+    def matches(self, sql: str) -> bool:
+        return _matches_outside_strings(_HEXTORAW_RE, sql)
+
+    def apply(self, sql: str) -> str:
+        def _repl(m: re.Match[str]) -> str:
+            return f"DECODE({m.group(1)}, 'hex')"
+
+        return _replace_outside_strings(_HEXTORAW_RE, _repl, sql)
+
+
+# ---------------------------------------------------------------------------
+# 13. WM_CONCAT → STRING_AGG
+# ---------------------------------------------------------------------------
+
+_WM_CONCAT_RE = re.compile(r"\bWM_CONCAT\s*" + _BALANCED_PARENS, re.IGNORECASE)
+
+
+class WMConcatRule(Rule):
+    name = "wm_concat_to_string_agg"
+    category = RuleCategory.SYNTAX_FUNCTIONS
+    priority = 120
+    description = "WM_CONCAT(col) -> STRING_AGG(col, ',')"
+
+    def matches(self, sql: str) -> bool:
+        return _matches_outside_strings(_WM_CONCAT_RE, sql)
+
+    def apply(self, sql: str) -> str:
+        def _repl(m: re.Match[str]) -> str:
+            return f"STRING_AGG({m.group(1)}, ',')"
+
+        return _replace_outside_strings(_WM_CONCAT_RE, _repl, sql)
+
+
+# ---------------------------------------------------------------------------
+# 14. RATIO_TO_REPORT → expr / SUM(expr) OVER
+# ---------------------------------------------------------------------------
+
+_RATIO_RE = re.compile(
+    r"\bRATIO_TO_REPORT\s*\(\s*(.+?)\s*\)\s*OVER\s*(\([^)]*\))",
+    re.IGNORECASE,
+)
+
+
+class RatioToReportRule(Rule):
+    name = "ratio_to_report_to_division"
+    category = RuleCategory.SYNTAX_FUNCTIONS
+    priority = 125
+    description = "RATIO_TO_REPORT(x) OVER (...) -> x::numeric / SUM(x) OVER (...)"
+
+    def matches(self, sql: str) -> bool:
+        return _matches_outside_strings(_RATIO_RE, sql)
+
+    def apply(self, sql: str) -> str:
+        def _repl(m: re.Match[str]) -> str:
+            expr = m.group(1).strip()
+            window = m.group(2)
+            return f"{expr}::numeric / SUM({expr}) OVER {window}"
+
+        return _replace_outside_strings(_RATIO_RE, _repl, sql)
+
+
+# ---------------------------------------------------------------------------
+# 15. SYS_GUID() → gen_random_uuid()
+# ---------------------------------------------------------------------------
+
+_SYS_GUID_RE = re.compile(r"\bSYS_GUID\s*\(\s*\)", re.IGNORECASE)
+
+
+class SYSGUIDRule(Rule):
+    name = "sys_guid_to_gen_random_uuid"
+    category = RuleCategory.SYNTAX_FUNCTIONS
+    priority = 130
+    description = "SYS_GUID() -> gen_random_uuid()"
+
+    def matches(self, sql: str) -> bool:
+        return _matches_outside_strings(_SYS_GUID_RE, sql)
+
+    def apply(self, sql: str) -> str:
+        return _replace_outside_strings(_SYS_GUID_RE, "gen_random_uuid()", sql)
+
+
+# ---------------------------------------------------------------------------
+# Utility: split comma-separated args respecting parentheses and quotes
+# ---------------------------------------------------------------------------
+
+
 def _split_args(text: str) -> list[str]:
     """Split a comma-separated argument string, respecting nested parentheses and quotes."""
     args: list[str] = []

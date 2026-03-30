@@ -241,6 +241,23 @@ class BFILERule(Rule):
         return self._pattern.sub("BYTEA", sql)
 
 
+class SDOGeometryRule(Rule):
+    """Convert MDSYS.SDO_GEOMETRY to GEOMETRY (PostGIS type)."""
+
+    name = "sdo_geometry_to_geometry"
+    category = RuleCategory.DATATYPES_BASIC
+    priority = 33
+    description = "Convert MDSYS.SDO_GEOMETRY to GEOMETRY"
+
+    _pattern = re.compile(r"\bMDSYS\.SDO_GEOMETRY\b", re.IGNORECASE)
+
+    def matches(self, sql: str) -> bool:
+        return bool(self._pattern.search(sql))
+
+    def apply(self, sql: str) -> str:
+        return self._pattern.sub("GEOMETRY", sql)
+
+
 class LONGRAWRule(Rule):
     """Convert LONG RAW to BYTEA.
 
