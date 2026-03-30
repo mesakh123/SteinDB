@@ -110,6 +110,7 @@ CATEGORY_KEYWORDS: dict[RuleCategory, frozenset[str]] = {
             "DUAL",
             "MINUS",
             "ROWID",
+            "ROWNUM",
             "MERGE",
             "CONNECT BY",
         }

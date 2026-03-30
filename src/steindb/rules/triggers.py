@@ -166,11 +166,17 @@ class TriggerBodyExtractionRule(Rule):
         else:
             return_stmt = "RETURN NEW;"
 
+        # Normalize body indentation: strip each line and re-indent with 2 spaces
+        body_lines = body.strip().splitlines()
+        normalized_body = "\n".join(
+            f"  {line.strip()}" if line.strip() else "" for line in body_lines
+        )
+
         lines = [
             f"CREATE OR REPLACE FUNCTION {func_name}() RETURNS TRIGGER AS $$",
             declare_block + "BEGIN",
-            f"{body.strip()}",
-            f"    {return_stmt}",
+            normalized_body,
+            f"  {return_stmt}",
             "END;",
             "$$ LANGUAGE plpgsql;",
             "",

@@ -99,6 +99,14 @@ _O2P_FORWARD_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         ),
         "plpgsql.variable_conflict indicates variable/column name masking that requires LLM review",
     ),
+    (
+        re.compile(r"\bCONNECT\s+BY\b", re.IGNORECASE),
+        "CONNECT BY hierarchical queries require LLM conversion (use WITH RECURSIVE in PostgreSQL)",
+    ),
+    (
+        re.compile(r"\bSTART\s+WITH\b", re.IGNORECASE),
+        "START WITH ... CONNECT BY hierarchical queries require LLM conversion",
+    ),
 ]
 
 # Keep the old module-level name for anything importing ``_LLM_FORWARD_PATTERNS``.
