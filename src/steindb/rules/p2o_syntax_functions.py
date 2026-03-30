@@ -357,3 +357,78 @@ class BooleanLiteralRule(Rule):
     def apply(self, sql: str) -> str:
         result = _replace_outside_strings(_TRUE_RE, "1", sql)
         return _replace_outside_strings(_FALSE_RE, "0", result)
+
+
+# ---------------------------------------------------------------------------
+# 11. LEFT(s, n) -> SUBSTR(s, 1, n)
+# ---------------------------------------------------------------------------
+
+_LEFT_RE = re.compile(r"\bLEFT\s*\(\s*(.+?)\s*,\s*(\d+)\s*\)", re.IGNORECASE)
+
+
+class LeftToSubstrRule(Rule):
+    name = "left_to_substr"
+    category = RuleCategory.P2O_SYNTAX_FUNCTIONS
+    priority = 100
+    description = "LEFT(s, n) -> SUBSTR(s, 1, n)"
+
+    def matches(self, sql: str) -> bool:
+        return _matches_outside_strings(_LEFT_RE, sql)
+
+    def apply(self, sql: str) -> str:
+        return _replace_outside_strings(
+            _LEFT_RE,
+            lambda m: f"SUBSTR({m.group(1).strip()}, 1, {m.group(2)})",
+            sql,
+        )
+
+
+# ---------------------------------------------------------------------------
+# 12. RIGHT(s, n) -> SUBSTR(s, -n)
+# ---------------------------------------------------------------------------
+
+_RIGHT_RE = re.compile(r"\bRIGHT\s*\(\s*(.+?)\s*,\s*(\d+)\s*\)", re.IGNORECASE)
+
+
+class RightToSubstrRule(Rule):
+    name = "right_to_substr"
+    category = RuleCategory.P2O_SYNTAX_FUNCTIONS
+    priority = 105
+    description = "RIGHT(s, n) -> SUBSTR(s, -n)"
+
+    def matches(self, sql: str) -> bool:
+        return _matches_outside_strings(_RIGHT_RE, sql)
+
+    def apply(self, sql: str) -> str:
+        return _replace_outside_strings(
+            _RIGHT_RE,
+            lambda m: f"SUBSTR({m.group(1).strip()}, -{m.group(2)})",
+            sql,
+        )
+
+
+# ---------------------------------------------------------------------------
+# 13. ILIKE -> UPPER(...) LIKE UPPER(...)
+# ---------------------------------------------------------------------------
+
+_ILIKE_RE = re.compile(
+    r"(\b\w+(?:\.\w+)?)\s+ILIKE\s+('(?:''|[^'])*')",
+    re.IGNORECASE,
+)
+
+
+class IlikeToUpperLikeRule(Rule):
+    name = "ilike_to_upper_like"
+    category = RuleCategory.P2O_SYNTAX_FUNCTIONS
+    priority = 110
+    description = "col ILIKE pattern -> UPPER(col) LIKE UPPER(pattern)"
+
+    def matches(self, sql: str) -> bool:
+        return _matches_outside_strings(_ILIKE_RE, sql)
+
+    def apply(self, sql: str) -> str:
+        return _replace_outside_strings(
+            _ILIKE_RE,
+            lambda m: f"UPPER({m.group(1)}) LIKE UPPER({m.group(2)})",
+            sql,
+        )
