@@ -176,6 +176,27 @@ class P2O_JSONBRule(Rule):  # noqa: N801
         return self._pattern.sub(_replace, sql)
 
 
+class P2O_INETRule(Rule):  # noqa: N801
+    """Convert INET and CIDR to VARCHAR2(45).
+
+    Oracle has no native network address type. VARCHAR2(45) accommodates
+    the longest possible IPv6 address with CIDR prefix.
+    """
+
+    name = "p2o_inet_to_varchar2"
+    category = RuleCategory.P2O_DATATYPES_BASIC
+    priority = 55
+    description = "Convert INET/CIDR to VARCHAR2(45)"
+
+    _pattern = re.compile(r"\b(?:INET|CIDR)\b", re.IGNORECASE)
+
+    def matches(self, sql: str) -> bool:
+        return bool(self._pattern.search(sql))
+
+    def apply(self, sql: str) -> str:
+        return self._pattern.sub("VARCHAR2(45)", sql)
+
+
 class P2O_BOOLEANRule(Rule):  # noqa: N801
     """Convert BOOLEAN to NUMBER(1).
 
