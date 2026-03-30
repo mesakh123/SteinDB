@@ -455,3 +455,26 @@ class QuoteIdentRemoveRule(Rule):
             return m.group(1)
 
         return _replace_outside_strings(_QUOTE_IDENT_RE, _repl, sql)
+
+
+# ---------------------------------------------------------------------------
+# 15. MD5(x) -> STANDARD_HASH(x, 'MD5')  (Oracle 12c+)
+# ---------------------------------------------------------------------------
+
+_MD5_RE = re.compile(r"\bMD5\s*" + _BALANCED_PARENS, re.IGNORECASE)
+
+
+class MD5ToStandardHashRule(Rule):
+    name = "md5_to_standard_hash"
+    category = RuleCategory.P2O_SYNTAX_FUNCTIONS
+    priority = 120
+    description = "MD5(x) -> STANDARD_HASH(x, 'MD5')"
+
+    def matches(self, sql: str) -> bool:
+        return _matches_outside_strings(_MD5_RE, sql)
+
+    def apply(self, sql: str) -> str:
+        def _repl(m: re.Match[str]) -> str:
+            return f"STANDARD_HASH({m.group(1)}, 'MD5')"
+
+        return _replace_outside_strings(_MD5_RE, _repl, sql)

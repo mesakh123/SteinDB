@@ -133,6 +133,29 @@ class P2O_DATERule(Rule):  # noqa: N801
         return "".join(result_parts)
 
 
+class P2O_TIMERule(Rule):  # noqa: N801
+    """Convert TIME and TIME WITH TIME ZONE to DATE/TIMESTAMP.
+
+    Oracle has no TIME type. TIME maps to DATE (which includes time in Oracle).
+    TIME WITH TIME ZONE maps to TIMESTAMP WITH TIME ZONE.
+    """
+
+    name = "p2o_time_to_date"
+    category = RuleCategory.P2O_DATATYPES_TEMPORAL
+    priority = 25
+    description = "Convert TIME to DATE; TIME WITH TIME ZONE to TIMESTAMP WITH TIME ZONE"
+
+    _time_tz_pattern = re.compile(r"\bTIME\s+WITH\s+TIME\s+ZONE\b", re.IGNORECASE)
+    _time_pattern = re.compile(r"\bTIME\b(?!\s+WITH|\s+ZONE|STAMP)", re.IGNORECASE)
+
+    def matches(self, sql: str) -> bool:
+        return bool(self._time_tz_pattern.search(sql)) or bool(self._time_pattern.search(sql))
+
+    def apply(self, sql: str) -> str:
+        result = self._time_tz_pattern.sub("TIMESTAMP WITH TIME ZONE", sql)
+        return self._time_pattern.sub("DATE", result)
+
+
 class P2O_INTERVALRule(Rule):  # noqa: N801
     """Convert INTERVAL to INTERVAL DAY TO SECOND.
 
