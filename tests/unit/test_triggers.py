@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from steindb.contracts.models import ScannedObject
+from steindb.rules.engine import O2PRuleEngine
+from steindb.rules.loader import create_direction_registry
 from steindb.rules.triggers import (
     AutoIncrementTriggerRule,
     NewOldPrefixRule,
@@ -165,3 +168,43 @@ class TestTriggerBodyExtractionRule:
         result = self.rule.apply(sql)
         assert "DECLARE" in result
         assert "v_total" in result
+
+
+class TestTriggerNoDuplicateLanguagePlpgsql:
+    """Regression: $$ LANGUAGE plpgsql; must appear exactly once after full pipeline."""
+
+    def test_no_duplicate_language_plpgsql_via_engine(self) -> None:
+        sql = (
+            "CREATE OR REPLACE TRIGGER trg_emp_audit\n"
+            "BEFORE UPDATE ON employees\n"
+            "FOR EACH ROW\n"
+            "BEGIN\n"
+            "  INSERT INTO audit_log (action, old_name, new_name)\n"
+            "  VALUES ('UPDATE', :OLD.name, :NEW.name);\n"
+            "END;"
+        )
+        registry = create_direction_registry("o2p")
+        engine = O2PRuleEngine(registry)
+        obj = ScannedObject(
+            name="trg_emp_audit",
+            object_type="TRIGGER",
+            source_sql=sql,
+            schema="HR",
+            line_count=7,
+        )
+        result = engine.convert(obj)
+        target = result.target_sql
+        count = target.count("$$ LANGUAGE plpgsql;")
+        assert count == 1, (
+            f"Expected exactly 1 occurrence of '$$ LANGUAGE plpgsql;', "
+            f"found {count}.\nOutput:\n{target}"
+        )
+        # Verify correct structure
+        assert "CREATE OR REPLACE FUNCTION trg_emp_audit_func()" in target
+        assert "RETURNS TRIGGER" in target
+        assert "CREATE TRIGGER trg_emp_audit BEFORE UPDATE ON employees" in target
+        assert "EXECUTE FUNCTION trg_emp_audit_func()" in target
+        assert "RETURN NEW;" in target
+        # :OLD/:NEW should be converted
+        assert ":OLD" not in target
+        assert ":NEW" not in target

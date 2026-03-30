@@ -75,6 +75,9 @@ class LanguageWrapperRule(Rule):
         return bool(has_create and self._PATTERN.search(sql))
 
     def apply(self, sql: str) -> str:
+        # Skip if $$ LANGUAGE plpgsql; already present (e.g. from trigger body extraction)
+        if "$$ LANGUAGE plpgsql;" in sql:
+            return sql
         # Replace the last END; with END; $$ LANGUAGE plpgsql;
         matches = list(self._PATTERN.finditer(sql))
         if not matches:
