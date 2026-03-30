@@ -90,6 +90,14 @@ CATEGORY_KEYWORDS: dict[RuleCategory, frozenset[str]] = {
             "ROWNUM",
             "LISTAGG",
             "DBMS_OUTPUT",
+            "LENGTHB",
+            "RAWTOHEX",
+            "HEXTORAW",
+            "REGEXP_LIKE",
+            "REGEXP_SUBSTR",
+            "TO_NUMBER",
+            "WM_CONCAT",
+            "RATIO_TO_REPORT",
         }
     ),
     RuleCategory.SYNTAX_DATETIME: frozenset(
@@ -116,7 +124,7 @@ CATEGORY_KEYWORDS: dict[RuleCategory, frozenset[str]] = {
         }
     ),
     RuleCategory.SEQUENCES: frozenset({"SEQUENCE", "NEXTVAL", "CURRVAL"}),
-    RuleCategory.TRIGGERS: frozenset({"TRIGGER"}),
+    RuleCategory.TRIGGERS: frozenset({"TRIGGER", "RAISE_APPLICATION_ERROR"}),
     RuleCategory.PLSQL_BASIC: frozenset(
         {
             "PROCEDURE",
@@ -124,6 +132,10 @@ CATEGORY_KEYWORDS: dict[RuleCategory, frozenset[str]] = {
             "BEGIN",
             "DECLARE",
             "EXCEPTION",
+            "DBMS_OUTPUT",
+            "EXECUTE IMMEDIATE",
+            "PLS_INTEGER",
+            "SYS_REFCURSOR",
         }
     ),
     RuleCategory.PLSQL_CONTROL_FLOW: frozenset(
