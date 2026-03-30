@@ -432,3 +432,26 @@ class IlikeToUpperLikeRule(Rule):
             lambda m: f"UPPER({m.group(1)}) LIKE UPPER({m.group(2)})",
             sql,
         )
+
+
+# ---------------------------------------------------------------------------
+# 14. quote_ident(x) -> x  (no Oracle equivalent)
+# ---------------------------------------------------------------------------
+
+_QUOTE_IDENT_RE = re.compile(r"\bquote_ident\s*" + _BALANCED_PARENS, re.IGNORECASE)
+
+
+class QuoteIdentRemoveRule(Rule):
+    name = "quote_ident_remove"
+    category = RuleCategory.P2O_SYNTAX_FUNCTIONS
+    priority = 115
+    description = "quote_ident(x) -> x (no Oracle equivalent)"
+
+    def matches(self, sql: str) -> bool:
+        return _matches_outside_strings(_QUOTE_IDENT_RE, sql)
+
+    def apply(self, sql: str) -> str:
+        def _repl(m: re.Match[str]) -> str:
+            return m.group(1)
+
+        return _replace_outside_strings(_QUOTE_IDENT_RE, _repl, sql)

@@ -51,6 +51,26 @@ class P2O_VARCHARRule(Rule):  # noqa: N801
         return pattern.sub(r"VARCHAR2(\1)", sql)
 
 
+class P2O_BareVARCHARRule(Rule):  # noqa: N801
+    """Convert bare VARCHAR (no size) to VARCHAR2.
+
+    In PL/pgSQL function parameters, VARCHAR without size is common.
+    """
+
+    name = "p2o_bare_varchar_to_varchar2"
+    category = RuleCategory.P2O_DATATYPES_BASIC
+    priority = 15
+    description = "Convert bare VARCHAR (no size) to VARCHAR2"
+
+    _pattern = re.compile(r"\bVARCHAR(?!2)\b(?!\s*\()", re.IGNORECASE)
+
+    def matches(self, sql: str) -> bool:
+        return bool(self._pattern.search(sql))
+
+    def apply(self, sql: str) -> str:
+        return self._pattern.sub("VARCHAR2", sql)
+
+
 class P2O_TEXTRule(Rule):  # noqa: N801
     """Convert TEXT to CLOB.
 
