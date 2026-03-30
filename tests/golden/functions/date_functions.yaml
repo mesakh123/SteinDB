@@ -15,7 +15,7 @@
 - name: add_months_to_interval
   category: functions
   oracle: "SELECT ADD_MONTHS(hire_date, 6) FROM employees"
-  expected_postgresql: "SELECT hire_date + INTERVAL '6 months' FROM employees"
+  expected_postgresql: "SELECT hire_date + (6 * interval '1 month') FROM employees"
   constructs: ["ADD_MONTHS"]
 
 - name: months_between_to_age

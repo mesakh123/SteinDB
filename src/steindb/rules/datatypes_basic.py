@@ -61,6 +61,54 @@ class NVARCHAR2Rule(Rule):
         return self._pattern.sub(r"VARCHAR(\1)", sql)
 
 
+class BareVARCHAR2Rule(Rule):
+    """Convert bare VARCHAR2 (without size) to VARCHAR.
+
+    In Oracle PL/SQL, parameter types commonly omit the size specification:
+    e.g., CREATE PROCEDURE foo(p IN VARCHAR2) is valid Oracle.
+    This rule runs after the sized VARCHAR2 rule to catch leftovers.
+    """
+
+    name = "bare_varchar2_to_varchar"
+    category = RuleCategory.DATATYPES_BASIC
+    priority = 15
+    description = "Convert bare VARCHAR2 (no size) to VARCHAR"
+
+    _pattern = re.compile(
+        r"\bVARCHAR2\b(?!\s*\()",
+        re.IGNORECASE,
+    )
+
+    def matches(self, sql: str) -> bool:
+        return bool(self._pattern.search(sql))
+
+    def apply(self, sql: str) -> str:
+        return self._pattern.sub("VARCHAR", sql)
+
+
+class BareNVARCHAR2Rule(Rule):
+    """Convert bare NVARCHAR2 (without size) to VARCHAR.
+
+    Same as BareVARCHAR2Rule but for NVARCHAR2.
+    """
+
+    name = "bare_nvarchar2_to_varchar"
+    category = RuleCategory.DATATYPES_BASIC
+    priority = 16
+    description = "Convert bare NVARCHAR2 (no size) to VARCHAR"
+
+    _pattern = re.compile(
+        r"\bNVARCHAR2\b(?!\s*\()",
+        re.IGNORECASE,
+    )
+
+    def matches(self, sql: str) -> bool:
+        return bool(self._pattern.search(sql))
+
+    def apply(self, sql: str) -> str:
+        return self._pattern.sub("VARCHAR", sql)
+
+
 class CHARRule(Rule):
     """Convert NCHAR(n) to CHAR(n).
 
@@ -70,7 +118,7 @@ class CHARRule(Rule):
 
     name = "nchar_to_char"
     category = RuleCategory.DATATYPES_BASIC
-    priority = 12
+    priority = 17
     description = "Convert NCHAR(n) to CHAR(n)"
 
     _pattern = re.compile(

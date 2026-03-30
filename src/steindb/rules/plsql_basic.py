@@ -17,7 +17,7 @@ class ReturnToReturnsRule(Rule):
     description = "Convert RETURN to RETURNS in function declarations"
 
     _PATTERN = re.compile(
-        r"(?<=\))\s+RETURN\s+(?P<type>\w+)",
+        r"\bRETURN\s+(?P<type>\w+)\s+(?=(?:IS|AS)\b)",
         re.IGNORECASE,
     )
 
@@ -25,7 +25,7 @@ class ReturnToReturnsRule(Rule):
         return bool(self._PATTERN.search(sql))
 
     def apply(self, sql: str) -> str:
-        return self._PATTERN.sub(lambda m: f" RETURNS {m.group('type')}", sql)
+        return self._PATTERN.sub(lambda m: f"RETURNS {m.group('type')} ", sql)
 
 
 class IStoASRule(Rule):
@@ -46,7 +46,11 @@ class IStoASRule(Rule):
         return bool(self._PATTERN.search(sql))
 
     def apply(self, sql: str) -> str:
-        return self._PATTERN.sub(r"\1 AS $$", sql, count=1)
+        def _replace(m: re.Match[str]) -> str:
+            prefix = m.group(1).rstrip()
+            return f"{prefix} AS $$"
+
+        return self._PATTERN.sub(_replace, sql, count=1)
 
 
 class LanguageWrapperRule(Rule):

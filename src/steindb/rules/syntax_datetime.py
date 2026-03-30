@@ -96,7 +96,7 @@ class ADDMONTHSRule(Rule):
     name = "add_months_to_interval"
     category = RuleCategory.SYNTAX_DATETIME
     priority = 30
-    description = "ADD_MONTHS(d, n) -> d + (n || ' months')::interval"
+    description = "ADD_MONTHS(d, n) -> d + (n * interval '1 month')"
 
     def matches(self, sql: str) -> bool:
         return _matches_outside_strings(_ADD_MONTHS_RE, sql)
@@ -105,7 +105,7 @@ class ADDMONTHSRule(Rule):
         def _repl(m: re.Match[str]) -> str:
             d = m.group(1).strip()
             n = m.group(2).strip()
-            return f"{d} + ({n} || ' months')::interval"
+            return f"{d} + ({n} * interval '1 month')"
 
         return _replace_outside_strings(_ADD_MONTHS_RE, _repl, sql)
 

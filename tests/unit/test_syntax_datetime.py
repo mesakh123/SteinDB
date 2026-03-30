@@ -63,11 +63,11 @@ class TestADDMONTHSRule:
 
     def test_apply(self) -> None:
         result = self.rule.apply("SELECT ADD_MONTHS(hire_date, 6) FROM emp")
-        assert "hire_date + (6 || ' months')::interval" in result
+        assert "hire_date + (6 * interval '1 month')" in result
 
     def test_apply_negative(self) -> None:
         result = self.rule.apply("SELECT ADD_MONTHS(SYSDATE, -3) FROM DUAL")
-        assert "SYSDATE + (-3 || ' months')::interval" in result
+        assert "SYSDATE + (-3 * interval '1 month')" in result
 
 
 class TestLASTDAYRule:
