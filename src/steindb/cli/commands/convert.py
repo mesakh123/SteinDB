@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import json
 from pathlib import Path
 
@@ -15,60 +14,9 @@ from steindb.contracts import (
     ScannedObject,
     ScanResult,
 )
-from steindb.rules import RuleEngine, RuleRegistry
+from steindb.rules import RuleEngine
+from steindb.rules.loader import create_direction_registry
 from steindb.rules.p2o_engine import P2ORuleEngine
-
-
-def _build_default_registry() -> RuleRegistry:
-    """Build a RuleRegistry with all available rules registered."""
-    import importlib
-
-    from steindb.rules.base import Rule as RuleBase
-
-    registry = RuleRegistry()
-
-    _rule_modules = [
-        "steindb.rules.ddl_cleanup",
-        "steindb.rules.datatypes_basic",
-        "steindb.rules.datatypes_numeric",
-        "steindb.rules.datatypes_temporal",
-        "steindb.rules.syntax_functions",
-        "steindb.rules.syntax_datetime",
-        "steindb.rules.syntax_joins",
-        "steindb.rules.syntax_null",
-        "steindb.rules.syntax_misc",
-        "steindb.rules.ddl_tables",
-        "steindb.rules.ddl_alter",
-        "steindb.rules.ddl_indexes",
-        "steindb.rules.sequences",
-        "steindb.rules.triggers",
-        "steindb.rules.plsql_basic",
-        "steindb.rules.plsql_control_flow",
-        "steindb.rules.packages",
-        "steindb.rules.synonyms",
-        "steindb.rules.materialized_views",
-        "steindb.rules.grants",
-        "steindb.rules.partitioning",
-    ]
-
-    for mod_name in _rule_modules:
-        try:
-            mod = importlib.import_module(mod_name)
-            for attr_name in dir(mod):
-                attr = getattr(mod, attr_name)
-                if (
-                    isinstance(attr, type)
-                    and issubclass(attr, RuleBase)
-                    and attr is not RuleBase
-                    and hasattr(attr, "name")
-                    and hasattr(attr, "category")
-                ):
-                    with contextlib.suppress(TypeError):
-                        registry.register(attr())
-        except ImportError:
-            pass
-
-    return registry
 
 
 def _parse_ddl_file(path: Path) -> list[ScannedObject]:
@@ -230,8 +178,8 @@ def convert_command(
 
     typer.echo(f"SteinDB Convert -- {len(objects)} objects, mode={mode}, direction={direction}")
 
-    # Build Rule Engine
-    registry = _build_default_registry()
+    # Build Rule Engine with direction-appropriate rules
+    registry = create_direction_registry(direction)
     engine = P2ORuleEngine(registry) if direction == "p2o" else RuleEngine(registry)
 
     converted_list: list[ConvertedObject] = []

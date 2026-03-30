@@ -6,7 +6,6 @@ from pathlib import Path  # noqa: TCH003
 
 import pytest
 from steindb.cli.commands.convert import (
-    _build_default_registry,
     _detect_object_name,
     _detect_object_type,
     _parse_ddl_file,
@@ -15,6 +14,7 @@ from steindb.cli.commands.convert import (
 )
 from steindb.contracts import ObjectType, ScannedObject, ScanResult
 from steindb.rules import RuleRegistry
+from steindb.rules.loader import create_direction_registry
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -174,15 +174,18 @@ class TestParseDDLFile:
         assert ObjectType.TABLE in types
 
 
-class TestBuildDefaultRegistry:
-    def test_returns_registry(self) -> None:
-        registry = _build_default_registry()
+class TestDirectionRegistry:
+    def test_o2p_returns_registry(self) -> None:
+        registry = create_direction_registry("o2p")
+        assert isinstance(registry, RuleRegistry)
+
+    def test_p2o_returns_registry(self) -> None:
+        registry = create_direction_registry("p2o")
         assert isinstance(registry, RuleRegistry)
 
     def test_registry_has_rules(self) -> None:
-        registry = _build_default_registry()
-        # Should have at least some rules registered
-        assert registry.rule_count >= 0  # May be 0 if rules have no default constructors
+        registry = create_direction_registry("o2p")
+        assert registry.rule_count >= 0
 
 
 # ---------------------------------------------------------------------------
